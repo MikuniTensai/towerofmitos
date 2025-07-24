@@ -34,7 +34,10 @@ class MobileControls {
     
     init() {
         this.setupTouchEvents();
-        this.createMobileUI();
+        // Initialize mobile UI only on mobile devices
+        if (GameConfig.utils.isMobile()) {
+            this.createMobileUI();
+        }
         this.setupOrientationChange();
     }
     
@@ -301,8 +304,9 @@ class MobileControls {
         const panFactor = this.panSpeed * this.cameraZoom;
         
         // Convert screen movement to world movement
+        // Invert deltaY to fix inverted vertical scrolling
         const worldDeltaX = -deltaX * panFactor * 0.01;
-        const worldDeltaZ = deltaY * panFactor * 0.01;
+        const worldDeltaZ = -deltaY * panFactor * 0.01;
         
         this.cameraTarget.x += worldDeltaX;
         this.cameraTarget.z += worldDeltaZ;
@@ -626,6 +630,13 @@ class MobileControls {
     showTowerUpgradeMenu(towerData) {
         // Implementation for tower upgrade menu
         console.log('Show tower upgrade menu for:', towerData);
+        
+        // Call the actual showTowerUpgradeModal function from game.js
+        if (window.showTowerUpgradeModal && towerData.x !== undefined && towerData.z !== undefined) {
+            window.showTowerUpgradeModal(towerData.x, towerData.z);
+        } else {
+            console.error('showTowerUpgradeModal function not found or invalid tower data:', towerData);
+        }
     }
     
     // Select tower type

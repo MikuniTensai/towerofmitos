@@ -27,6 +27,7 @@
                  top: 0;
                  left: 0;
                  z-index: 1;
+                 display: none; /* Hidden by default, shown when game starts */
              }
              canvas {
                  display: block;
@@ -247,11 +248,30 @@
                 <button id="close-tower-modal">Close</button>
             </div>
             
+            <!-- Tower Upgrade Modal (Hidden by default) -->
+            <div id="tower-upgrade-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: rgba(0,0,0,0.95); color: white; padding: 20px; border-radius: 10px; border: 2px solid #FFD700; box-shadow: 0 4px 20px rgba(0,0,0,0.7); min-width: 350px; text-align: center; pointer-events: auto; cursor: default;">
+                <h3 id="tower-upgrade-title">Tower Options</h3>
+                <div id="tower-upgrade-info">
+                    <p id="tower-current-stats"></p>
+                    <div id="upgrade-section">
+                        <h4>Upgrade Options:</h4>
+                        <p id="upgrade-stats"></p>
+                        <button id="upgrade-tower-btn" style="background: #4169E1; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 14px; pointer-events: auto; user-select: none;">Upgrade ($<span id="upgrade-cost">0</span>)</button>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button id="destroy-tower-btn" style="background: #DC143C; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 14px; pointer-events: auto; user-select: none;">Destroy Tower</button>
+                    <button id="close-upgrade-modal" style="background: #666; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 14px; pointer-events: auto; user-select: none;">Close</button>
+                </div>
+            </div>
+            
             <!-- Game Controls - Right Side -->
             <div id="game-controls-right">
                 <button id="start-wave">Start Wave</button>
+                <button id="toggle-perspective" onclick="togglePerspective()" style="background: #9932CC !important;">📷 3D Perspective</button>
                 <button id="pause-game" onclick="togglePause()">⏸️</button>
                 <button id="restart-game" onclick="restartGame()">🔄</button>
+                <button id="menu-button" onclick="returnToMainMenu()" style="background: #6A5ACD !important;">🏠 Menu</button>
             </div>
             <div id="gameStatus">
                 <div id="statusText"></div>
@@ -260,13 +280,19 @@
         </div>
         
         <script type="text/javascript" src="js/libs/three.min.js"></script>
+        <script type="text/javascript" src="js/libs/fflate.min.js"></script>
+        <script type="text/javascript" src="js/libs/FBXLoader.js"></script>
         <script type="text/javascript" src="js/config.js"></script>
         <script type="text/javascript" src="js/tower.js"></script>
         <script type="text/javascript" src="js/audioManager.js"></script>
         <script type="text/javascript" src="js/visualManager.js"></script>
         <script type="text/javascript" src="js/saveSystem.js"></script>
+        <script type="text/javascript" src="js/enemy.js"></script>
         <script type="text/javascript" src="js/mobileControls.js"></script>
         <script type="text/javascript" src="js/levels/level1.js"></script>
+        <script type="text/javascript" src="js/levels/level2.js"></script>
+        <script type="text/javascript" src="js/levels/level3.js"></script>
+        <script type="text/javascript" src="js/menuSystem.js"></script>
         <script type="text/javascript" src="js/index.js"></script>
         <script type="text/javascript" src="js/game.js"></script>
     </body>

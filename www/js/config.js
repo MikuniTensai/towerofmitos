@@ -17,6 +17,46 @@ const GameConfig = {
         pixelRatio: window.devicePixelRatio || 1
     },
     
+    // Graphics Quality Settings
+    quality: {
+        current: 'high', // default quality
+        presets: {
+            low: {
+                name: 'Low',
+                shadows: false,
+                antialiasing: false,
+                particleEffects: false,
+                shadowMapSize: 512,
+                maxParticles: 20,
+                pixelRatio: 1,
+                fog: false,
+                lightIntensity: 0.8
+            },
+            medium: {
+                name: 'Medium',
+                shadows: true,
+                antialiasing: false,
+                particleEffects: true,
+                shadowMapSize: 1024,
+                maxParticles: 35,
+                pixelRatio: 1,
+                fog: true,
+                lightIntensity: 0.9
+            },
+            high: {
+                name: 'High',
+                shadows: true,
+                antialiasing: true,
+                particleEffects: true,
+                shadowMapSize: 2048,
+                maxParticles: 50,
+                pixelRatio: window.devicePixelRatio || 1,
+                fog: true,
+                lightIntensity: 1.0
+            }
+        }
+    },
+    
     // Mobile Settings
     mobile: {
         touchSensitivity: 1.5,
@@ -48,7 +88,7 @@ const GameConfig = {
     
     // Enemy Types Configuration
     enemyTypes: {
-        basic: {
+        tuyul: {
             name: 'Basic Enemy',
             health: 50,
             speed: 0.02,
@@ -56,16 +96,16 @@ const GameConfig = {
             color: 0xFF0000,
             size: 0.3
         },
-        fast: {
-            name: 'Fast Enemy',
+        jalangkung: {
+            name: 'Jalangkung Enemy',
             health: 30,
             speed: 0.04,
             reward: 15,
             color: 0x00FF00,
             size: 0.25
         },
-        tank: {
-            name: 'Tank Enemy',
+        genderuwo: {
+             name: 'Genderuwo Enemy',
             health: 150,
             speed: 0.01,
             reward: 25,
@@ -140,7 +180,7 @@ const GameConfig = {
 GameConfig.utils = {
     // Get enemy configuration by type
     getEnemyConfig: function(type) {
-        return this.enemyTypes[type] || this.enemyTypes.basic;
+        return this.enemyTypes[type] || this.enemyTypes.tuyul;
     },
     
     // Get projectile configuration by type
@@ -185,6 +225,33 @@ GameConfig.utils = {
             shadowMapSize: isMobile ? 512 : 1024,
             maxParticles: isMobile ? 25 : 50
         };
+    },
+    
+    // Get current quality settings
+    getCurrentQuality: function() {
+        return GameConfig.quality.presets[GameConfig.quality.current] || GameConfig.quality.presets.high;
+    },
+    
+    // Set quality level
+    setQuality: function(qualityLevel) {
+        if (GameConfig.quality.presets[qualityLevel]) {
+            GameConfig.quality.current = qualityLevel;
+            // Save to localStorage
+            const settings = this.loadSettings();
+            settings.quality = qualityLevel;
+            this.saveSettings(settings);
+            return true;
+        }
+        return false;
+    },
+    
+    // Load quality from saved settings
+    loadQuality: function() {
+        const settings = this.loadSettings();
+        if (settings.quality && GameConfig.quality.presets[settings.quality]) {
+            GameConfig.quality.current = settings.quality;
+        }
+        return GameConfig.quality.current;
     }
 };
 

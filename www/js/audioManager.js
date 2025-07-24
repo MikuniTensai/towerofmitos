@@ -89,6 +89,11 @@ class AudioManager {
         }
     }
     
+    // Alias for playSFX (for compatibility)
+    playSFX(name, volume = 1.0) {
+        this.playSound(name, volume);
+    }
+    
     // Play music
     playMusic(name, fadeIn = false) {
         if (!this.enabled || !this.music[name]) return;

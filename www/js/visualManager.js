@@ -5,8 +5,11 @@ class VisualManager {
         this.particles = [];
         this.explosions = [];
         this.trails = [];
-        this.maxParticles = GameConfig.performance.maxParticles;
-        this.enabled = GameConfig.visual.particleEffects;
+        
+        // Get quality settings
+        const qualitySettings = GameConfig.utils.getCurrentQuality();
+        this.maxParticles = qualitySettings.maxParticles;
+        this.enabled = qualitySettings.particleEffects;
         
         // Particle geometries (reused for performance)
         this.particleGeometry = new THREE.SphereGeometry(0.05, 6, 6);
@@ -26,7 +29,10 @@ class VisualManager {
     createExplosion(position, type = 'basic', intensity = 1.0) {
         if (!this.enabled) return;
         
-        const particleCount = Math.min(10 * intensity, 20);
+        // Adjust particle count based on quality settings
+        const qualitySettings = GameConfig.utils.getCurrentQuality();
+        const baseParticleCount = qualitySettings.maxParticles <= 20 ? 5 : (qualitySettings.maxParticles <= 35 ? 8 : 10);
+        const particleCount = Math.min(baseParticleCount * intensity, qualitySettings.maxParticles / 2);
         const particles = [];
         
         for (let i = 0; i < particleCount; i++) {
@@ -293,6 +299,14 @@ class VisualManager {
     // Set maximum particles
     setMaxParticles(max) {
         this.maxParticles = max;
+        this.cleanupParticles();
+    }
+    
+    // Update quality settings
+    updateQualitySettings() {
+        const qualitySettings = GameConfig.utils.getCurrentQuality();
+        this.maxParticles = qualitySettings.maxParticles;
+        this.enabled = qualitySettings.particleEffects;
         this.cleanupParticles();
     }
     

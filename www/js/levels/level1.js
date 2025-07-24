@@ -10,70 +10,49 @@ const Level1 = {
     // Available Tower Types for this level
     availableTowers: ['basic', 'slow', 'splash'],
     
-    // Enemy Types Configuration
-    enemies: {
-        types: {
-            basic: {
-                health: 100,
-                speed: 0.015,
-                reward: 10,
-                color: 0xFF4500,
-                size: 0.3
-            },
-            fast: {
-                health: 60,
-                speed: 0.025,
-                reward: 15,
-                color: 0x00FF00,
-                size: 0.25
-            },
-            tank: {
-                health: 200,
-                speed: 0.008,
-                reward: 25,
-                color: 0x8B4513,
-                size: 0.4
-            },
-            boss: {
-                health: 500,
-                speed: 0.012,
-                reward: 100,
-                color: 0x800080,
-                size: 0.6
-            }
-        }
-    },
+    // Enemy Types for this level (will be populated by EnemySystem)
+    availableEnemyTypes: ['tuyul', 'jalangkung', 'genderuwo', 'lembusura', 'kuntilanak', 'mbok dukun pikun', 'ratu laut neraka', 'orang bunian', 'roh tanah bangkit'],
+    
+    // Level difficulty multiplier for enemy scaling
+    difficultyMultiplier: 1.0,
 
     // Enemy Waves Configuration
     waves: [
         {
             waveNumber: 1,
-            totalEnemies: 12,
+            totalEnemies: 10,
             spawnInterval: 1000,
             enemies: [
-                { type: 'basic', count: 10 },
-                { type: 'fast', count: 2 }
+                { type: 'tuyul', count: 5 },
+                { type: 'jalangkung', count: 2 },
+                { type: 'ratu laut neraka', count: 2 },
+                { type: 'orang bunian', count: 1 },
             ]
         },
         {
             waveNumber: 2,
-            totalEnemies: 21,
+            totalEnemies: 24,
             spawnInterval: 800,
             enemies: [
-                { type: 'basic', count: 15 },
-                { type: 'fast', count: 5 },
-                { type: 'tank', count: 1 }
+                { type: 'tuyul', count: 15 },
+                { type: 'jalangkung', count: 5 },
+                { type: 'lembusura', count: 2 },
+                { type: 'genderuwo', count: 1 },
+                { type: 'roh tanah bangkit', count: 1 }
             ]
         },
         {
             waveNumber: 3,
-            totalEnemies: 32,
+            totalEnemies: 38,
             spawnInterval: 600,
             enemies: [
-                { type: 'basic', count: 20 },
-                { type: 'fast', count: 8 },
-                { type: 'tank', count: 3 },
-                { type: 'boss', count: 1 }
+                { type: 'tuyul', count: 17 },
+                { type: 'jalangkung', count: 8 },
+                { type: 'lembusura', count: 3 },
+                { type: 'genderuwo', count: 3 },
+                { type: 'kuntilanak', count: 4 },
+                { type: 'mbok dukun pikun', count: 1 },
+                { type: 'ratu laut neraka', count: 2 }
             ]
         }
     ],
