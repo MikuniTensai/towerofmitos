@@ -24,6 +24,11 @@ class MobileControls {
         this.panSpeed = GameConfig.mobile.panSpeed;
         this.touchSensitivity = GameConfig.mobile.touchSensitivity;
         
+        // Performance optimization
+        this.lastCameraUpdate = 0;
+        this.cameraUpdateThrottle = 16; // ~60fps
+        this.pendingCameraUpdate = false;
+        
         // UI elements
         this.uiElements = new Map();
         this.selectedTower = null;
@@ -280,8 +285,8 @@ class MobileControls {
         // Check all possible tower slots in the map
         for (let z = 0; z < mapLayout.length; z++) {
             for (let x = 0; x < mapLayout[z].length; x++) {
-                // Check if this is a valid tower placement spot (empty ground)
-                if (mapLayout[z][x] === 0) {
+                // Check if this is a valid tower placement spot (tower slot)
+                if (mapLayout[z][x] === 2) {
                     const slotWorldPos = new THREE.Vector3(x, 0, z);
                     const distance = worldPoint.distanceTo(slotWorldPos);
                     
@@ -301,6 +306,9 @@ class MobileControls {
     
     // Pan camera
     panCamera(deltaX, deltaY) {
+        // Don't pan if OrbitControls is enabled
+        if (window.isOrbitControlsEnabled) return;
+        
         const panFactor = this.panSpeed * this.cameraZoom;
         
         // Convert screen movement to world movement
@@ -311,12 +319,13 @@ class MobileControls {
         this.cameraTarget.x += worldDeltaX;
         this.cameraTarget.z += worldDeltaZ;
         
-        // Clamp camera position to map bounds
+        // Clamp camera position to map bounds with buffer
         const mapWidth = GameConfig.camera.mapWidth;
         const mapHeight = GameConfig.camera.mapHeight;
+        const buffer = 5; // Allow some movement outside strict bounds
         
-        this.cameraTarget.x = Math.max(-mapWidth/4, Math.min(mapWidth + mapWidth/4, this.cameraTarget.x));
-        this.cameraTarget.z = Math.max(-mapHeight/4, Math.min(mapHeight + mapHeight/4, this.cameraTarget.z));
+        this.cameraTarget.x = Math.max(-mapWidth/4 - buffer, Math.min(mapWidth + mapWidth/4 + buffer, this.cameraTarget.x));
+        this.cameraTarget.z = Math.max(-mapHeight/4 - buffer, Math.min(mapHeight + mapHeight/4 + buffer, this.cameraTarget.z));
         
         // Update camera
         this.updateCamera();
@@ -330,8 +339,28 @@ class MobileControls {
         this.updateCamera();
     }
     
-    // Update camera position and zoom
+    // Update camera position and zoom (optimized with throttling)
     updateCamera() {
+        const now = performance.now();
+        
+        // Throttle camera updates for better performance
+        if (now - this.lastCameraUpdate < this.cameraUpdateThrottle) {
+            if (!this.pendingCameraUpdate) {
+                this.pendingCameraUpdate = true;
+                requestAnimationFrame(() => {
+                    this.pendingCameraUpdate = false;
+                    this.performCameraUpdate();
+                });
+            }
+            return;
+        }
+        
+        this.performCameraUpdate();
+        this.lastCameraUpdate = now;
+    }
+    
+    // Perform actual camera update
+    performCameraUpdate() {
         if (this.camera.isOrthographicCamera) {
             const aspect = window.innerWidth / window.innerHeight;
             const mapWidth = GameConfig.camera.mapWidth;
@@ -383,9 +412,7 @@ class MobileControls {
         // Add responsive CSS
         this.addResponsiveCSS();
         
-        // Create zoom controls
-        this.createZoomControls();
-        
+        // Note: Zoom controls removed - now handled by OrbitControls
         // Note: Tower selection is now handled by modal in HTML
         // Game controls (start wave, pause, restart) are now in HTML on the right side
         
@@ -413,17 +440,7 @@ class MobileControls {
                     font-size: 11px !important;
                 }
                 
-                #zoomPanel {
-                    right: 5px !important;
-                    bottom: 15px !important;
-                    gap: 8px !important;
-                }
-                
-                #zoomPanel button {
-                    width: 35px !important;
-                    height: 35px !important;
-                    font-size: 12px !important;
-                }
+                /* Zoom panel styles removed - zoom now handled by OrbitControls */
                 
                 #game-controls-right {
                     right: 15px !important;
@@ -450,11 +467,7 @@ class MobileControls {
                     font-size: 10px !important;
                 }
                 
-                #zoomPanel button {
-                    width: 30px !important;
-                    height: 30px !important;
-                    font-size: 10px !important;
-                }
+                /* Zoom panel button styles removed */
                 
                 #game-controls-right button {
                     padding: 8px 10px !important;
@@ -475,11 +488,7 @@ class MobileControls {
                     font-size: 9px !important;
                 }
                 
-                #zoomPanel button {
-                    width: 28px !important;
-                    height: 28px !important;
-                    font-size: 9px !important;
-                }
+                /* Zoom panel landscape styles removed */
                 
                 #game-controls-right {
                     gap: 8px !important;
@@ -500,10 +509,7 @@ class MobileControls {
                     padding-right: max(20px, env(safe-area-inset-right)) !important;
                 }
                 
-                #zoomPanel {
-                    right: max(5px, env(safe-area-inset-right)) !important;
-                    bottom: max(15px, env(safe-area-inset-bottom)) !important;
-                }
+                /* Zoom panel safe area styles removed */
                 
                 #game-controls-right {
                     right: max(20px, env(safe-area-inset-right)) !important;
@@ -515,59 +521,7 @@ class MobileControls {
     
 
     
-    // Create zoom controls
-    createZoomControls() {
-        const zoomPanel = document.createElement('div');
-        zoomPanel.id = 'zoomPanel';
-        zoomPanel.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            z-index: 1000;
-        `;
-        
-        const zoomInBtn = document.createElement('button');
-        zoomInBtn.textContent = '+';
-        zoomInBtn.style.cssText = `
-            width: 45px;
-            height: 45px;
-            border: 2px solid #fff;
-            border-radius: 22px;
-            background: rgba(76, 175, 80, 0.8);
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
-            cursor: pointer;
-            touch-action: manipulation;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-        
-        const zoomOutBtn = document.createElement('button');
-        zoomOutBtn.textContent = '-';
-        zoomOutBtn.style.cssText = zoomInBtn.style.cssText;
-        zoomOutBtn.style.background = 'rgba(244, 67, 54, 0.8)';
-        
-        zoomInBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.zoomCamera(1.2);
-        });
-        
-        zoomOutBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.zoomCamera(0.8);
-        });
-        
-        zoomPanel.appendChild(zoomInBtn);
-        zoomPanel.appendChild(zoomOutBtn);
-        
-        document.body.appendChild(zoomPanel);
-        this.uiElements.set('zoomPanel', zoomPanel);
-    }
+    // Zoom controls removed - now handled by OrbitControls in 3D Perspective mode
     
 
     
@@ -587,7 +541,7 @@ class MobileControls {
         // Create indicators for all valid tower placement spots
         for (let z = 0; z < mapLayout.length; z++) {
             for (let x = 0; x < mapLayout[z].length; x++) {
-                if (mapLayout[z][x] === 0) { // Empty ground
+                if (mapLayout[z][x] === 2) { // Tower slot
                     const geometry = new THREE.RingGeometry(0.2, 0.4, 12);
                     const material = new THREE.MeshBasicMaterial({
                         color: 0x00FF00,

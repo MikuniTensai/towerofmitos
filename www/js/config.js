@@ -91,7 +91,7 @@ const GameConfig = {
         tuyul: {
             name: 'Basic Enemy',
             health: 50,
-            speed: 0.02,
+            speed: 0.08,
             reward: 10,
             color: 0xFF0000,
             size: 0.3
@@ -99,7 +99,7 @@ const GameConfig = {
         jalangkung: {
             name: 'Jalangkung Enemy',
             health: 30,
-            speed: 0.04,
+            speed: 0.16,
             reward: 15,
             color: 0x00FF00,
             size: 0.25
@@ -107,7 +107,7 @@ const GameConfig = {
         genderuwo: {
              name: 'Genderuwo Enemy',
             health: 150,
-            speed: 0.01,
+            speed: 0.04,
             reward: 25,
             color: 0x0000FF,
             size: 0.4
@@ -115,7 +115,7 @@ const GameConfig = {
         boss: {
             name: 'Boss Enemy',
             health: 500,
-            speed: 0.015,
+            speed: 0.06,
             reward: 100,
             color: 0x800080,
             size: 0.6

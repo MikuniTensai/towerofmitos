@@ -22,7 +22,7 @@ class TowerSystem {
                 description: 'Standard tower with light damage'
             },
             slow: {
-                name: 'Slow Tower',
+                name: 'Dupa Penenang Jiwa',
                 cost: 75,
                 damage: 15,
                 range: 2.5,
@@ -30,13 +30,13 @@ class TowerSystem {
                 color: 0x00BFFF,
                 projectileSpeed: 0.08,
                 special: 'slow',
-                slowEffect: 0.5, // 50% speed reduction
+                slowEffect: 2.0, // 200% speed reduction (super slow)
                 slowDuration: 2000, // 2 seconds
                 damageType: 'magical', // Efektif vs stealth, roh tanah bangkit enemies
-                description: 'Magical tower that slows enemies'
+                description: 'Magical tower that slows enemies significantly'
             },
             splash: {
-                name: 'Splash Tower',
+                name: 'Meriam Sesajen',
                 cost: 100,
                 damage: 40,
                 range: 2,
@@ -51,7 +51,7 @@ class TowerSystem {
             
             // NEW TOWER TYPES FOR FUTURE LEVELS
             antiair: {
-                name: 'Anti-Air Tower',
+                name: 'Tombak Garuda',
                 cost: 120,
                 damage: 35,
                 range: 4,
@@ -63,7 +63,7 @@ class TowerSystem {
                 description: 'Specialized tower for aerial targets'
             },
             piercing: {
-                name: 'Piercing Tower',
+                name: 'Keris Pusaka',
                 cost: 150,
                 damage: 60,
                 range: 3.5,
@@ -76,7 +76,7 @@ class TowerSystem {
                 description: 'High damage tower that pierces armor'
             },
             freeze: {
-                name: 'Freeze Tower',
+                name: 'Kristal Es Kutub',
                 cost: 90,
                 damage: 20,
                 range: 2.8,
@@ -89,7 +89,7 @@ class TowerSystem {
                 description: 'Freezes enemies temporarily'
             },
             laser: {
-                name: 'Laser Tower',
+                name: 'Sinar Dewata',
                 cost: 200,
                 damage: 80,
                 range: 5,
@@ -101,7 +101,7 @@ class TowerSystem {
                 description: 'Instant hit laser with long range'
             },
             poison: {
-                name: 'Poison Tower',
+                name: 'Racun Upas',
                 cost: 110,
                 damage: 25,
                 range: 2.2,
@@ -117,7 +117,7 @@ class TowerSystem {
             
             // ADVANCED TOWER TYPES FOR SPECIAL ENEMIES
             detector: {
-                name: 'Detector Tower',
+                name: 'Mata Batin',
                 cost: 130,
                 damage: 30,
                 range: 4.5,
@@ -130,7 +130,7 @@ class TowerSystem {
                 description: 'Reveals and damages stealth enemies'
             },
             emp: {
-                name: 'EMP Tower',
+                name: 'Mantra Pelemah',
                 cost: 180,
                 damage: 45,
                 range: 3.0,
@@ -143,7 +143,7 @@ class TowerSystem {
                 description: 'Disables enemy special abilities temporarily'
             },
             chain: {
-                name: 'Chain Lightning Tower',
+                name: 'Petir Indra',
                 cost: 160,
                 damage: 35,
                 range: 3.5,
@@ -158,7 +158,7 @@ class TowerSystem {
                 description: 'Lightning jumps between enemies'
             },
             suppressor: {
-                name: 'Suppressor Tower',
+                name: 'Jimat Penekan',
                 cost: 140,
                 damage: 20,
                 range: 3.8,
@@ -171,7 +171,7 @@ class TowerSystem {
                 description: 'Prevents enemy healing and buffing'
             },
             barrier: {
-                name: 'Barrier Tower',
+                name: 'Pagar Betawi',
                 cost: 200,
                 damage: 0, // Tidak ada damage
                 range: 0, // Tidak menyerang
@@ -185,7 +185,7 @@ class TowerSystem {
                 description: 'Creates protective barrier for nearby towers'
             },
             temporal: {
-                name: 'Temporal Tower',
+                name: 'Pusaran Waktu',
                 cost: 250,
                 damage: 40,
                 range: 3.0,
@@ -199,7 +199,7 @@ class TowerSystem {
                 description: 'Manipulates time to slow all enemies in area'
             },
             adaptive: {
-                name: 'Adaptive Tower',
+                name: 'Pusaka Seribu Wajah',
                 cost: 300,
                 damage: 50,
                 range: 3.2,
@@ -212,7 +212,7 @@ class TowerSystem {
                 description: 'Adapts damage type to enemy weakness'
             },
             orbital: {
-                name: 'Orbital Strike Tower',
+                name: 'Halilintar Batara',
                 cost: 400,
                 damage: 150,
                 range: 6.0,
@@ -317,8 +317,9 @@ class TowerSystem {
         const towerData = this.towerTypes[type];
         if (!towerData) return null;
         
-        // Special handling for 'basic' tower (Lilin Pemanggil Arwah) with FBX model
-        if (type === 'basic') {
+        // Check if tower has FBX model available
+        const fbxTowerTypes = ['basic', 'slow', 'splash', 'antiair', 'piercing', 'freeze', 'laser', 'poison'];
+        if (fbxTowerTypes.includes(type)) {
             return this.createFBXTower(type, x, z, scene, 1); // Start at level 1
         }
         
@@ -523,9 +524,27 @@ class TowerSystem {
         const loader = new THREE.FBXLoader();
         const textureLoader = new THREE.TextureLoader();
         
+        // Map tower types to their folder names and file prefixes
+        const towerFolderMap = {
+            'basic': { folder: 'Lilin Pemanggil Arwah', prefix: 'lilin-pemanggil-arwah' },
+            'slow': { folder: 'Dupa Penenang Jiwa', prefix: 'dupa-penenang-jiwa' },
+            'splash': { folder: 'Meriam Sesajen', prefix: 'meriam-sesajen' },
+            'antiair': { folder: 'Tombak Garuda', prefix: 'tombak-garuda' },
+            'piercing': { folder: 'Keris Pusaka', prefix: 'keris-pusaka' },
+            'freeze': { folder: 'Kristal Es Kutub', prefix: 'kristal-es-kutub' },
+            'laser': { folder: 'Sinar Dewata', prefix: 'sinar-dewata' },
+            'poison': { folder: 'Racun Upas', prefix: 'racun-upas' }
+        };
+        
+        const towerInfo = towerFolderMap[type];
+        if (!towerInfo) {
+            console.error(`No FBX mapping found for tower type: ${type}`);
+            return this.createBasicTower(type, x, z, scene);
+        }
+        
         // Determine model and texture paths based on level
-        const modelPath = `js/tower/Lilin Pemanggil Arwah/lilin-pemanggil-arwah-lvl${level}.fbx`;
-        const texturePath = `js/tower/Lilin Pemanggil Arwah/texture-lvl${level}.jpg`;
+        const modelPath = `js/tower/${towerInfo.folder}/${towerInfo.prefix}-lvl${level}.fbx`;
+        const texturePath = `js/tower/${towerInfo.folder}/texture-lvl${level}.jpg`;
         
         // Load FBX model
         loader.load(modelPath, (fbxModel) => {
@@ -534,7 +553,9 @@ class TowerSystem {
                 // Set up the tower model
                 const tower = fbxModel;
                 tower.scale.setScalar(0.0099); // Adjust scale as needed
-                tower.position.set(x, 0.5, z);
+                // Raise position for larger towers to avoid being buried in ground
+                const positionY = type === 'basic' ? 0.5 : 0.9;
+                tower.position.set(x, positionY, z);
                 tower.castShadow = true;
                 tower.receiveShadow = true;
                 
@@ -604,10 +625,12 @@ class TowerSystem {
                 
                 // Animate tower placement
                 const animateScale = () => {
-                    const targetScale = 0.0099;
+                    // Scale 12000% for all towers except basic (Lilin Pemanggil Arwah)
+                    const targetScale = type === 'basic' ? 0.0099 : 1.188;
                     const currentScale = tower.scale.x;
+                    const scaleIncrement = type === 'basic' ? 0.005 : 0.6;
                     if (currentScale < targetScale) {
-                        tower.scale.addScalar(0.005);
+                        tower.scale.addScalar(scaleIncrement);
                         requestAnimationFrame(animateScale);
                     } else {
                         tower.scale.setScalar(targetScale);
@@ -627,8 +650,12 @@ class TowerSystem {
             
             function setupTowerWithoutTexture() {
                 const tower = fbxModel;
-                tower.scale.setScalar(0.0099);
-                tower.position.set(x, 0.5, z);
+                // Scale 12000% for all towers except basic (Lilin Pemanggil Arwah)
+                const initialScale = type === 'basic' ? 0.0099 : 1.188;
+                tower.scale.setScalar(initialScale);
+                // Raise position for larger towers to avoid being buried in ground
+                const yPosition = type === 'basic' ? 0.5 : 0.9;
+                tower.position.set(x, yPosition, z);
                 tower.castShadow = true;
                 tower.receiveShadow = true;
                 
@@ -670,10 +697,12 @@ class TowerSystem {
                 scene.add(tower);
                 
                 const animateScale = () => {
-                    const targetScale = 0.0099;
+                    // Scale 12000% for all towers except basic (Lilin Pemanggil Arwah)
+                    const targetScale = type === 'basic' ? 0.0099 : 1.188;
                     const currentScale = tower.scale.x;
+                    const scaleIncrement = type === 'basic' ? 0.005 : 0.6;
                     if (currentScale < targetScale) {
-                        tower.scale.addScalar(0.005);
+                        tower.scale.addScalar(scaleIncrement);
                         requestAnimationFrame(animateScale);
                     } else {
                         tower.scale.setScalar(targetScale);
@@ -826,8 +855,9 @@ class TowerSystem {
         
         tower.level++;
         
-        // Special handling for 'basic' tower (Lilin Pemanggil Arwah) - replace FBX model
-        if (tower.type === 'basic' && tower.mesh) {
+        // Check if tower has FBX model for upgrade
+        const fbxTowerTypes = ['basic', 'slow', 'splash', 'antiair', 'piercing', 'freeze', 'laser', 'poison'];
+        if (fbxTowerTypes.includes(tower.type) && tower.mesh) {
             this.upgradeFBXTower(tower, scene);
         } else if (tower.mesh) {
             // Visual upgrade indicator for other towers
@@ -839,6 +869,7 @@ class TowerSystem {
     }
     
     upgradeFBXTower(tower, scene) {
+        console.log(`[UPGRADE LOG] ===== STARTING UPGRADE FOR ${tower.type} TO LEVEL ${tower.level} =====`);
         const loader = new THREE.FBXLoader();
         const textureLoader = new THREE.TextureLoader();
         
@@ -846,6 +877,7 @@ class TowerSystem {
         const x = tower.x;
         const z = tower.z;
         const oldMesh = tower.mesh;
+        console.log(`[UPGRADE LOG] ${tower.type} - Position: (${x}, ${z}), Old mesh:`, oldMesh);
         
         if (oldMesh) {
             // Dispose of old model resources
@@ -868,18 +900,60 @@ class TowerSystem {
             scene.remove(oldMesh);
         }
         
+        // Map tower types to their folder names and file prefixes
+        const towerFolderMap = {
+            'basic': { folder: 'Lilin Pemanggil Arwah', prefix: 'lilin-pemanggil-arwah' },
+            'slow': { folder: 'Dupa Penenang Jiwa', prefix: 'dupa-penenang-jiwa' },
+            'splash': { folder: 'Meriam Sesajen', prefix: 'meriam-sesajen' },
+            'antiair': { folder: 'Tombak Garuda', prefix: 'tombak-garuda' },
+            'piercing': { folder: 'Keris Pusaka', prefix: 'keris-pusaka' },
+            'freeze': { folder: 'Kristal Es Kutub', prefix: 'kristal-es-kutub' },
+            'laser': { folder: 'Sinar Dewata', prefix: 'sinar-dewata' },
+            'poison': { folder: 'Racun Upas', prefix: 'racun-upas' }
+        };
+        
+        const towerInfo = towerFolderMap[tower.type];
+        if (!towerInfo) {
+            console.error(`No FBX mapping found for tower type: ${tower.type}`);
+            return;
+        }
+        
         // Determine new model and texture paths based on level
-        const modelPath = `js/tower/Lilin Pemanggil Arwah/lilin-pemanggil-arwah-lvl${tower.level}.fbx`;
-        const texturePath = `js/tower/Lilin Pemanggil Arwah/texture-lvl${tower.level}.jpg`;
+        const modelPath = `js/tower/${towerInfo.folder}/${towerInfo.prefix}-lvl${tower.level}.fbx`;
+        const texturePath = `js/tower/${towerInfo.folder}/texture-lvl${tower.level}.jpg`;
         
         // Load new FBX model
         loader.load(modelPath, (fbxModel) => {
+            console.log(`[UPGRADE LOG] Loading FBX model for ${tower.type} level ${tower.level}`);
+            console.log(`[UPGRADE LOG] Model path: ${modelPath}`);
+            console.log(`[UPGRADE LOG] FBX model loaded:`, fbxModel);
+            
             // Load new texture
             textureLoader.load(texturePath, (texture) => {
+                console.log(`[UPGRADE LOG] Texture loaded for ${tower.type}:`, texture);
+                
                 // Set up the upgraded tower model
                 const newTower = fbxModel;
-                newTower.scale.setScalar(0.0099); // Adjust scale as needed
-                newTower.position.set(x, 0.5, z);
+                // Consistent scaling for all towers with level progression
+                const baseScale = 0.0099;
+                const levelMultiplier = 1 + (tower.level - 1) * 0.3; // 30% increase per level
+                const upgradeScale = baseScale * levelMultiplier;
+                console.log(`[UPGRADE LOG] ${tower.type} - baseScale: ${baseScale}, levelMultiplier: ${levelMultiplier}, upgradeScale: ${upgradeScale}`);
+                
+                newTower.scale.setScalar(upgradeScale);
+                // Consistent position for all towers
+                const positionY = 0.5;
+                newTower.position.set(x, positionY, z);
+                console.log(`[UPGRADE LOG] ${tower.type} - Position set to: (${x}, ${positionY}, ${z})`);
+                console.log(`[UPGRADE LOG] ${tower.type} - Scale set to: ${upgradeScale}`);
+                
+                // Check model bounding box and visibility
+                const box = new THREE.Box3().setFromObject(newTower);
+                const size = box.getSize(new THREE.Vector3());
+                console.log(`[UPGRADE LOG] ${tower.type} - Model bounding box size:`, size);
+                console.log(`[UPGRADE LOG] ${tower.type} - Model visible:`, newTower.visible);
+                console.log(`[UPGRADE LOG] ${tower.type} - Model children count:`, newTower.children.length);
+                
                 newTower.castShadow = true;
                 newTower.receiveShadow = true;
                 
@@ -894,6 +968,7 @@ class TowerSystem {
                 // Apply texture to all materials
                 newTower.traverse((child) => {
                     if (child.isMesh) {
+                        console.log(`[UPGRADE LOG] ${tower.type} - Mesh found:`, child.name, 'visible:', child.visible, 'scale:', child.scale, 'geometry vertices:', child.geometry?.attributes?.position?.count);
                         if (child.material) {
                             if (Array.isArray(child.material)) {
                                 child.material.forEach(mat => {
@@ -924,22 +999,28 @@ class TowerSystem {
                 scene.add(upgradeGlow);
                 
                 // Start with small scale and animate
-                newTower.scale.set(0.0006, 0.0006, 0.0006);
+                const startScale = upgradeScale * 0.06; // Start at 6% of target scale
+                console.log(`[UPGRADE LOG] ${tower.type} - Animation startScale: ${startScale}`);
+                newTower.scale.set(startScale, startScale, startScale);
                 scene.add(newTower);
+                console.log(`[UPGRADE LOG] ${tower.type} - Tower added to scene with initial scale: ${startScale}`);
                 
                 // Update tower mesh reference
                 tower.mesh = newTower;
+                console.log(`[UPGRADE LOG] ${tower.type} - Tower mesh reference updated`);
                 
                 // Animate upgrade
                 const animateUpgrade = () => {
-                    const targetScale = 0.0099;
+                    const targetScale = upgradeScale;
                     const currentScale = newTower.scale.x;
+                    const scaleIncrement = targetScale * 0.1; // 10% of target scale per frame
                     if (currentScale < targetScale) {
-                        newTower.scale.addScalar(0.001);
+                        newTower.scale.addScalar(scaleIncrement);
                         upgradeGlow.scale.addScalar(0.02);
                         requestAnimationFrame(animateUpgrade);
                     } else {
                         newTower.scale.setScalar(targetScale);
+                        console.log(`[UPGRADE LOG] ${tower.type} - Animation completed, final scale: ${targetScale}`);
                         // Remove upgrade glow effect after animation
                         scene.remove(upgradeGlow);
                         upgradeGlow.geometry.dispose();
@@ -949,17 +1030,35 @@ class TowerSystem {
                 animateUpgrade();
                 
             }, (progress) => {
-                console.log('Upgrade texture loading progress:', progress);
-            }, (error) => {
-                console.error('Error loading upgrade texture:', error);
-                // Continue without texture
-                setupUpgradeWithoutTexture();
-            });
+            console.log(`[UPGRADE LOG] ${tower.type} - Texture loading progress:`, progress);
+        }, (error) => {
+            console.error(`[UPGRADE LOG] ${tower.type} - Error loading upgrade texture:`, error);
+            console.log(`[UPGRADE LOG] ${tower.type} - Falling back to setup without texture`);
+            // Continue without texture
+            setupUpgradeWithoutTexture();
+        });
             
             function setupUpgradeWithoutTexture() {
+                console.log(`[UPGRADE LOG] ${tower.type} - Setting up upgrade WITHOUT texture`);
                 const newTower = fbxModel;
-                newTower.scale.setScalar(0.0099);
-                newTower.position.set(x, 0.5, z);
+                // Consistent scaling for all towers with level progression
+                const baseScale = 0.0099;
+                const levelMultiplier = 1 + (tower.level - 1) * 0.3; // 30% increase per level
+                const upgradeScale = baseScale * levelMultiplier;
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - baseScale: ${baseScale}, levelMultiplier: ${levelMultiplier}, upgradeScale: ${upgradeScale}`);
+                newTower.scale.setScalar(upgradeScale);
+                // Consistent position for all towers
+                const yPosition = 0.5;
+                newTower.position.set(x, yPosition, z);
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Position: (${x}, ${yPosition}, ${z}), Scale: ${upgradeScale}`);
+                
+                // Check model bounding box and visibility for non-texture setup
+                const box = new THREE.Box3().setFromObject(newTower);
+                const size = box.getSize(new THREE.Vector3());
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Model bounding box size:`, size);
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Model visible:`, newTower.visible);
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Model children count:`, newTower.children.length);
+                
                 newTower.castShadow = true;
                 newTower.receiveShadow = true;
                 
@@ -972,36 +1071,44 @@ class TowerSystem {
                 
                 newTower.traverse((child) => {
                     if (child.isMesh) {
+                        console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Mesh found:`, child.name, 'visible:', child.visible, 'scale:', child.scale, 'geometry vertices:', child.geometry?.attributes?.position?.count);
                         child.castShadow = true;
                         child.receiveShadow = true;
                     }
                 });
                 
                 newTower.scale.set(0.1, 0.1, 0.1);
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Initial animation scale set to 0.1`);
                 scene.add(newTower);
                 tower.mesh = newTower;
+                console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Tower added to scene and mesh reference updated`);
                 
                 const animateUpgrade = () => {
-                    const targetScale = 0.0099;
+                    // Consistent target scale for all towers
+                    const targetScale = baseScale * levelMultiplier;
                     const currentScale = newTower.scale.x;
+                    const scaleIncrement = targetScale * 0.1; // 10% of target scale per frame
                     if (currentScale < targetScale) {
-                        newTower.scale.addScalar(0.001);
+                        newTower.scale.addScalar(scaleIncrement);
                         requestAnimationFrame(animateUpgrade);
                     } else {
                         newTower.scale.setScalar(targetScale);
+                        console.log(`[UPGRADE LOG] ${tower.type} - WITHOUT TEXTURE - Animation completed, final scale: ${targetScale}`);
                     }
                 };
                 animateUpgrade();
             }
             
         }, (progress) => {
-            console.log('Upgrade FBX model loading progress:', progress);
+            console.log(`[UPGRADE LOG] ${tower.type} - FBX model loading progress:`, progress);
         }, (error) => {
-            console.error('Error loading upgrade FBX model:', error);
+            console.error(`[UPGRADE LOG] ${tower.type} - Error loading upgrade FBX model:`, error);
+            console.log(`[UPGRADE LOG] ${tower.type} - Falling back to scaling existing model`);
             // Fallback to scaling existing model
             if (tower.mesh) {
                 const scale = 1 + (tower.level - 1) * 0.1;
                 tower.mesh.scale.set(scale, scale, scale);
+                console.log(`[UPGRADE LOG] ${tower.type} - Fallback scale applied: ${scale}`);
             }
         });
     }

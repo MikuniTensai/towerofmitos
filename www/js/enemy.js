@@ -12,7 +12,7 @@ class EnemySystem {
             // Basic enemy types
             tuyul: {
                 baseHealth: 100,
-                baseSpeed: 0.005625,
+                baseSpeed: 0.0225,
                 baseReward: 10,
                 color: 0xFF4500,
                 size: 0.3,
@@ -22,7 +22,7 @@ class EnemySystem {
             },
             jalangkung: {
                 baseHealth: 60,
-                baseSpeed: 0.009375,
+                baseSpeed: 0.0375,
                 baseReward: 15,
                 color: 0x00FF00,
                 size: 0.25,
@@ -32,7 +32,7 @@ class EnemySystem {
             },
             genderuwo: {
                 baseHealth: 200,
-                baseSpeed: 0.003,
+                baseSpeed: 0.012,
                 baseReward: 25,
                 color: 0x8B4513,
                 size: 0.4,
@@ -42,7 +42,7 @@ class EnemySystem {
             },
             lembusura: {
                 baseHealth: 180,
-                baseSpeed: 0.005625,
+                baseSpeed: 0.0225,
                 baseReward: 25,
                 color: 0x696969,
                 size: 0.35,
@@ -52,7 +52,7 @@ class EnemySystem {
             },
             kuntilanak: {
                 baseHealth: 120,
-                baseSpeed: 0.009375,
+                baseSpeed: 0.0375,
                 baseReward: 28,
                 color: 0x00BFFF,
                 size: 0.3,
@@ -62,7 +62,7 @@ class EnemySystem {
             },
             'mbok dukun pikun': {
                 baseHealth: 500,
-                baseSpeed: 0.0045,
+                baseSpeed: 0.018,
                 baseReward: 100,
                 color: 0x800080,
                 size: 0.6,
@@ -72,7 +72,7 @@ class EnemySystem {
             },
             'ratu laut neraka': {
                 baseHealth: 2000,
-                baseSpeed: 0.00525,
+                baseSpeed: 0.021,
                 baseReward: 500,
                 color: 0x8B0000,
                 size: 1.5,
@@ -82,7 +82,7 @@ class EnemySystem {
             },
             'orang bunian': {
                 baseHealth: 80,
-                baseSpeed: 0.0075,
+                baseSpeed: 0.03,
                 baseReward: 35,
                 color: 0x483D8B,
                 size: 2,
@@ -92,7 +92,7 @@ class EnemySystem {
             },
             'roh tanah bangkit': {
                 baseHealth: 150,
-                baseSpeed: 0.0045,
+                baseSpeed: 0.018,
                 baseReward: 40,
                 color: 0x32CD32,
                 size: 0.35,
@@ -102,7 +102,7 @@ class EnemySystem {
             },
             explosive: {
                 baseHealth: 90,
-                baseSpeed: 0.00675,
+                baseSpeed: 0.027,
                 baseReward: 30,
                 color: 0xFF6347,
                 size: 0.32,
@@ -114,7 +114,7 @@ class EnemySystem {
             // NEW ENEMY TYPES FOR FUTURE LEVELS
             shielded: {
                 baseHealth: 250,
-                baseSpeed: 0.004,
+                baseSpeed: 0.016,
                 baseReward: 45,
                 color: 0x4682B4,
                 size: 0.38,
@@ -124,7 +124,7 @@ class EnemySystem {
             },
             swarm: {
                 baseHealth: 40,
-                baseSpeed: 0.008,
+                baseSpeed: 0.032,
                 baseReward: 8,
                 color: 0xFFD700,
                 size: 0.2,
@@ -134,7 +134,7 @@ class EnemySystem {
             },
             berserker: {
                 baseHealth: 160,
-                baseSpeed: 0.007,
+                baseSpeed: 0.028,
                 baseReward: 35,
                 color: 0xDC143C,
                 size: 0.33,
@@ -144,7 +144,7 @@ class EnemySystem {
             },
             phantom: {
                 baseHealth: 100,
-                baseSpeed: 0.006,
+                baseSpeed: 0.024,
                 baseReward: 50,
                 color: 0x9370DB,
                 size: 0.3,
@@ -154,7 +154,7 @@ class EnemySystem {
             },
             titan: {
                 baseHealth: 800,
-                baseSpeed: 0.003,
+                baseSpeed: 0.012,
                 baseReward: 150,
                 color: 0x2F4F4F,
                 size: 0.8,
@@ -166,7 +166,7 @@ class EnemySystem {
             // ADVANCED ENEMY TYPES WITH SPECIAL ABILITIES
             invisible: {
                 baseHealth: 120,
-                baseSpeed: 0.006,
+                baseSpeed: 0.024,
                 baseReward: 60,
                 color: 0x708090,
                 size: 0.3,
@@ -180,7 +180,7 @@ class EnemySystem {
             },
             cloaked: {
                 baseHealth: 90,
-                baseSpeed: 0.007,
+                baseSpeed: 0.028,
                 baseReward: 45,
                 color: 0x2F2F2F,
                 size: 0.28,
@@ -192,7 +192,7 @@ class EnemySystem {
             },
             healer: {
                 baseHealth: 140,
-                baseSpeed: 0.004,
+                baseSpeed: 0.016,
                 baseReward: 55,
                 color: 0x98FB98,
                 size: 0.35,
@@ -206,7 +206,7 @@ class EnemySystem {
             },
             buffer: {
                 baseHealth: 110,
-                baseSpeed: 0.005,
+                baseSpeed: 0.02,
                 baseReward: 50,
                 color: 0xFFD700,
                 size: 0.32,
@@ -220,7 +220,7 @@ class EnemySystem {
             },
             teleporter: {
                 baseHealth: 100,
-                baseSpeed: 0.006,
+                baseSpeed: 0.024,
                 baseReward: 65,
                 color: 0x9370DB,
                 size: 0.3,
@@ -234,7 +234,7 @@ class EnemySystem {
             },
             splitter: {
                 baseHealth: 150,
-                baseSpeed: 0.004,
+                baseSpeed: 0.016,
                 baseReward: 40,
                 color: 0xFF69B4,
                 size: 0.4,
@@ -244,11 +244,11 @@ class EnemySystem {
                 special: 'split',
                 splitCount: 3, // Jumlah enemy kecil yang muncul
                 splitHealth: 30, // HP enemy kecil
-                splitSpeed: 0.008 // Speed enemy kecil
+                splitSpeed: 0.032 // Speed enemy kecil
             },
             immune: {
                 baseHealth: 200,
-                baseSpeed: 0.004,
+                baseSpeed: 0.016,
                 baseReward: 80,
                 color: 0x4169E1,
                 size: 0.38,

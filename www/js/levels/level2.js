@@ -25,7 +25,8 @@ const Level2 = {
             enemies: [
                 { type: 'tuyul', count: 12 },
                 { type: 'jalangkung', count: 3 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 2,
@@ -36,7 +37,8 @@ const Level2 = {
                 { type: 'jalangkung', count: 6 },
                 { type: 'lembusura', count: 3 },
                 { type: 'genderuwo', count: 1 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 3,
@@ -48,7 +50,8 @@ const Level2 = {
                 { type: 'lembusura', count: 4 },
                 { type: 'genderuwo', count: 2 },
                 { type: 'mbok dukun pikun', count: 1 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 4,
@@ -60,7 +63,8 @@ const Level2 = {
                 { type: 'lembusura', count: 5 },
                 { type: 'genderuwo', count: 2 },
                 { type: 'mbok dukun pikun', count: 1 }
-            ]
+            ],
+            autoStart: false
         }
     ],
     

@@ -26,7 +26,8 @@ const Level3 = {
                 { type: 'tuyul', count: 15 },
                 { type: 'jalangkung', count: 5 },
                 { type: 'lembusura', count: 2 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 2,
@@ -37,7 +38,8 @@ const Level3 = {
                 { type: 'jalangkung', count: 8 },
                 { type: 'lembusura', count: 4 },
                 { type: 'kuntilanak', count: 3 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 3,
@@ -49,7 +51,8 @@ const Level3 = {
                 { type: 'lembusura', count: 5 },
                 { type: 'kuntilanak', count: 3 },
                 { type: 'genderuwo', count: 2 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 4,
@@ -62,7 +65,8 @@ const Level3 = {
                 { type: 'kuntilanak', count: 5 },
                 { type: 'genderuwo', count: 3 },
                 { type: 'mbok dukun pikun', count: 1 }
-            ]
+            ],
+            autoStart: false
         },
         {
             waveNumber: 5,
@@ -76,7 +80,8 @@ const Level3 = {
                 { type: 'genderuwo', count: 5 },
                 { type: 'mbok dukun pikun', count: 2 },
                 { type: 'ratu laut neraka', count: 1 }
-            ]
+            ],
+            autoStart: false
          }
      ],
      

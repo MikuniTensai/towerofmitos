@@ -15,6 +15,14 @@ let gameState = {
     finishPos: { x: 38, z: 1 }
 };
 
+// Tutorial system
+let tutorialState = {
+    active: false,
+    step: 0,
+    completed: false,
+    overlay: null
+};
+
 // Modular systems
 let towerSystem;
 let enemySystem;
@@ -25,11 +33,25 @@ let mobileControls;
 let currentLevel;
 let lastTime = 0;
 
+// FPS tracking variables
+let fpsCounter = 0;
+let fpsLastTime = Date.now();
+let currentFPS = 60;
+
+// Performance optimizer
+let performanceOptimizer = null;
+
 // Camera perspective variables
 let currentViewIndex = 0;
 let cameraViews = [];
 let originalCameraPosition = null;
 let originalCameraRotation = null;
+let orbitControls; // OrbitControls for 3D perspective mode
+let isOrbitControlsEnabled = false;
+
+// Persistent camera positions for each perspective
+let savedCameraStates = {};
+let orbitControlsChangeListener = null;
 
 // Function to return to main menu
 function returnToMainMenu() {
@@ -210,6 +232,11 @@ function init() {
     mapLayout = currentLevel.mapLayout;
     enemyPath = currentLevel.enemyPath;
     
+    // Initialize tutorial ONLY if this is tutorial level AND selected from menu
+    if (currentLevel.tutorial && menuSystem && menuSystem.selectedLevel === 'tutorial') {
+        initializeTutorial();
+    }
+    
     // Update game state based on level settings
     if (currentLevel.settings) {
         gameState.health = currentLevel.settings.startingHealth || 10;
@@ -347,6 +374,9 @@ function init() {
 
     // Initialize visual manager after scene is created
     visualManager = new VisualManager(scene);
+    
+    // Initialize performance optimizer
+    performanceOptimizer = new PerformanceOptimizer();
 
     createMap();
     setupEventListeners();
@@ -361,13 +391,33 @@ function init() {
     };
     mobileControls = new MobileControls(renderer, camera, gameObject);
     
+    // Initialize OrbitControls for 3D perspective mode
+    if (typeof THREE.OrbitControls !== 'undefined') {
+        orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+        orbitControls.enableDamping = true;
+        orbitControls.dampingFactor = 0.05;
+        orbitControls.screenSpacePanning = false;
+        orbitControls.minDistance = 10;
+        orbitControls.maxDistance = 100;
+        orbitControls.maxPolarAngle = Math.PI / 2;
+        orbitControls.enabled = false; // Disabled by default
+    }
+    
     // Only create mobile UI if on mobile device
     if (GameConfig.utils.isMobile()) {
         // Mobile UI is already created in MobileControls constructor
     }
     
     updateUI();
-    autoStartGame(); // Start first wave automatically
+    
+    // Show tower recommendation for non-tutorial levels
+    if (!currentLevel.tutorial) {
+        setTimeout(() => {
+            showTowerRecommendation();
+        }, 1000);
+    }
+    
+    showLevelEnemyPreview(); // Show enemy preview first, then start game
     animate();
 }
 
@@ -404,14 +454,35 @@ function createMap() {
 
                 case 2: // Tower placement
                     geometry = new THREE.PlaneGeometry(1, 1);
-                    material = new THREE.MeshLambertMaterial({ color: 0x90EE90 });
+                    
+                    // Check if this slot is in a restricted zone
+                    const restrictionCheck = isInRestrictedZone(x, z);
+                    let slotColor = 0x90EE90; // Default green
+                    let slotOpacity = 1.0;
+                    
+                    if (restrictionCheck.restricted) {
+                        slotColor = 0xFF6B6B; // Red for restricted areas
+                        slotOpacity = 0.5; // Semi-transparent
+                    }
+                    
+                    material = new THREE.MeshLambertMaterial({ 
+                        color: slotColor,
+                        transparent: slotOpacity < 1.0,
+                        opacity: slotOpacity
+                    });
                     mesh = new THREE.Mesh(geometry, material);
                     mesh.rotation.x = -Math.PI / 2;
                     mesh.position.set(x, 0, z);
                     mesh.receiveShadow = true;
-                    mesh.userData = { x: x, z: z, type: 'towerSlot' };
+                    mesh.userData = { x: x, z: z, type: 'towerSlot', restricted: restrictionCheck.restricted };
                     scene.add(mesh);
-                    gameMap[z][x] = { type: 'towerSlot', mesh: mesh, hasTower: false };
+                    gameMap[z][x] = { 
+                        type: 'towerSlot', 
+                        mesh: mesh, 
+                        hasTower: false, 
+                        restricted: restrictionCheck.restricted,
+                        restrictionReason: restrictionCheck.reason
+                    };
                     break;
 
                 case 'S': // Start
@@ -479,6 +550,37 @@ function setupEventListeners() {
     const closeUpgradeModalBtn = document.getElementById('close-upgrade-modal');
     if (closeUpgradeModalBtn) {
         closeUpgradeModalBtn.addEventListener('click', hideTowerUpgradeModal);
+    }
+    
+    // Perspective control buttons
+    const perspectiveTopBtn = document.getElementById('perspective-top');
+    if (perspectiveTopBtn) {
+        perspectiveTopBtn.addEventListener('click', () => setPerspective('top'));
+    }
+    
+    const perspectiveSideBtn = document.getElementById('perspective-side');
+    if (perspectiveSideBtn) {
+        perspectiveSideBtn.addEventListener('click', () => setPerspective('side'));
+    }
+    
+    const perspectiveIsoBtn = document.getElementById('perspective-iso');
+    if (perspectiveIsoBtn) {
+        perspectiveIsoBtn.addEventListener('click', () => setPerspective('isometric'));
+    }
+    
+    const perspectiveFreeBtn = document.getElementById('perspective-free');
+    if (perspectiveFreeBtn) {
+        perspectiveFreeBtn.addEventListener('click', () => setPerspective('free'));
+    }
+    
+    const perspectiveBirdsBtn = document.getElementById('perspective-birds');
+    if (perspectiveBirdsBtn) {
+        perspectiveBirdsBtn.addEventListener('click', () => setPerspective('birds'));
+    }
+    
+    const perspectiveCloseupBtn = document.getElementById('perspective-closeup');
+    if (perspectiveCloseupBtn) {
+        perspectiveCloseupBtn.addEventListener('click', () => setPerspective('closeup'));
     }
     
     // Mobile controls
@@ -573,6 +675,11 @@ function onMouseClick(event) {
 
 // Handle mouse wheel for desktop zoom
 function onMouseWheel(event) {
+    // Don't interfere with OrbitControls when enabled
+    if (isOrbitControlsEnabled) {
+        return;
+    }
+    
     event.preventDefault();
     
     if (mobileControls) {
@@ -585,6 +692,11 @@ function onMouseWheel(event) {
 // Handle keyboard input for desktop camera controls
 function onKeyDown(event) {
     if (!gameState.gameRunning) return;
+    
+    // Don't interfere with OrbitControls when enabled
+    if (isOrbitControlsEnabled) {
+        return;
+    }
     
     if (mobileControls) {
         const panAmount = 2; // Adjust pan sensitivity
@@ -669,7 +781,7 @@ function showTowerUpgradeModal(x, z) {
     
     // Check if tower can be upgraded
     const cost = towerSystem.getUpgradeCost(tower);
-    if (cost !== null && tower.level <= 3) {
+    if (cost !== null && tower.level < 3) {
         const upgradeData = towerSystem.upgradeSystem[tower.type][tower.level - 1];
         if (upgradeSection) upgradeSection.style.display = 'block';
         if (upgradeStats) {
@@ -688,7 +800,9 @@ function showTowerUpgradeModal(x, z) {
             upgradeBtn.style.background = gameState.money < cost ? '#666' : '#4169E1';
         }
     } else {
+        // Tower is at maximum level (3) - hide upgrade section
         if (upgradeSection) upgradeSection.style.display = 'none';
+        if (upgradeBtn) upgradeBtn.style.display = 'none';
     }
     
     // Create backdrop if it doesn't exist
@@ -703,7 +817,7 @@ function showTowerUpgradeModal(x, z) {
             width: 100%;
             height: 100%;
             background: rgba(0,0,0,0.5);
-            z-index: 9998;
+            z-index: 10000;
             display: none;
             pointer-events: none;
         `;
@@ -721,6 +835,29 @@ function showTowerUpgradeModal(x, z) {
     console.log('Tower upgrade modal should be visible now:', modal.style.display);
     console.log('Modal element:', modal);
     console.log('Modal computed style:', window.getComputedStyle(modal));
+    
+    // Add rotation button event listeners
+    const rotateNorthBtn = document.getElementById('rotate-north-btn');
+    const rotateEastBtn = document.getElementById('rotate-east-btn');
+    const rotateSouthBtn = document.getElementById('rotate-south-btn');
+    const rotateWestBtn = document.getElementById('rotate-west-btn');
+    
+    if (rotateNorthBtn && !rotateNorthBtn.hasAttribute('data-listener-added')) {
+        rotateNorthBtn.addEventListener('click', () => rotateTower('north'));
+        rotateNorthBtn.setAttribute('data-listener-added', 'true');
+    }
+    if (rotateEastBtn && !rotateEastBtn.hasAttribute('data-listener-added')) {
+        rotateEastBtn.addEventListener('click', () => rotateTower('east'));
+        rotateEastBtn.setAttribute('data-listener-added', 'true');
+    }
+    if (rotateSouthBtn && !rotateSouthBtn.hasAttribute('data-listener-added')) {
+        rotateSouthBtn.addEventListener('click', () => rotateTower('south'));
+        rotateSouthBtn.setAttribute('data-listener-added', 'true');
+    }
+    if (rotateWestBtn && !rotateWestBtn.hasAttribute('data-listener-added')) {
+        rotateWestBtn.addEventListener('click', () => rotateTower('west'));
+        rotateWestBtn.setAttribute('data-listener-added', 'true');
+    }
     
     // Play UI sound
     if (audioManager) {
@@ -742,6 +879,184 @@ function hideTowerUpgradeModal() {
     }
 }
 
+// Helper function to get map bounds
+function getMapBounds() {
+    // Default bounds based on typical map size
+    const defaultBounds = {
+        minX: -20,
+        maxX: 20,
+        minZ: -20,
+        maxZ: 20
+    };
+    
+    // If we have a map loaded, calculate actual bounds
+    if (window.mapData && window.mapData.path) {
+        const pathBounds = calculatePathBounds(window.mapData.path);
+        return {
+            minX: pathBounds.minX - 10,
+            maxX: pathBounds.maxX + 10,
+            minZ: pathBounds.minZ - 10,
+            maxZ: pathBounds.maxZ + 10
+        };
+    }
+    
+    return defaultBounds;
+}
+
+// Helper function to calculate path bounds
+function calculatePathBounds(path) {
+    let minX = Infinity, maxX = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    
+    path.forEach(point => {
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minZ = Math.min(minZ, point.z);
+        maxZ = Math.max(maxZ, point.z);
+    });
+    
+    return { minX, maxX, minZ, maxZ };
+}
+
+// Helper function to clamp camera target to map bounds
+function clampCameraTarget(target, bounds) {
+    target.x = Math.max(bounds.minX, Math.min(bounds.maxX, target.x));
+    target.z = Math.max(bounds.minZ, Math.min(bounds.maxZ, target.z));
+}
+
+// Helper function to check if area is accessible
+function isAreaAccessible(x, z) {
+    // Check if coordinates are within map bounds
+    if (!gameMap || !gameMap[z] || !gameMap[z][x]) {
+        return false;
+    }
+    
+    const cell = gameMap[z][x];
+    
+    // Only allow access to tower slots
+    if (cell.type === 'towerSlot') {
+        return true;
+    }
+    
+    // Restrict access to walls, start, and finish areas
+    return false;
+}
+
+// Helper function to get restricted zones based on level progression
+function getRestrictedZones() {
+    const restrictedZones = [];
+    
+    // Add level-specific restrictions
+    if (currentLevel && currentLevel.restrictedAreas) {
+        restrictedZones.push(...currentLevel.restrictedAreas);
+    }
+    
+    // Add dynamic restrictions based on game state
+    if (gameState.currentWave < 2) {
+        // Restrict certain areas until wave 2
+        restrictedZones.push({
+            minX: 30, maxX: 39,
+            minZ: 0, maxZ: 14,
+            reason: 'Area unlocked after Wave 2'
+        });
+    }
+    
+    return restrictedZones;
+}
+
+// Helper function to check if position is in restricted zone
+function isInRestrictedZone(x, z) {
+    const restrictedZones = getRestrictedZones();
+    
+    for (const zone of restrictedZones) {
+        if (x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) {
+            return { restricted: true, reason: zone.reason || 'Area is restricted' };
+        }
+    }
+    
+    return { restricted: false };
+}
+
+// Function to update restricted area visuals
+function updateRestrictedAreaVisuals() {
+    if (!gameMap) return;
+    
+    for (let z = 0; z < gameMap.length; z++) {
+        for (let x = 0; x < gameMap[z].length; x++) {
+            const cell = gameMap[z][x];
+            
+            if (cell && cell.type === 'towerSlot' && cell.mesh) {
+                const restrictionCheck = isInRestrictedZone(x, z);
+                
+                // Update material based on current restriction status
+                let slotColor = 0x90EE90; // Default green
+                let slotOpacity = 1.0;
+                
+                if (restrictionCheck.restricted) {
+                    slotColor = 0xFF6B6B; // Red for restricted areas
+                    slotOpacity = 0.5; // Semi-transparent
+                }
+                
+                // Update material properties
+                cell.mesh.material.color.setHex(slotColor);
+                cell.mesh.material.transparent = slotOpacity < 1.0;
+                cell.mesh.material.opacity = slotOpacity;
+                cell.mesh.material.needsUpdate = true;
+                
+                // Update cell data
+                cell.restricted = restrictionCheck.restricted;
+                cell.restrictionReason = restrictionCheck.reason;
+                cell.mesh.userData.restricted = restrictionCheck.restricted;
+            }
+        }
+    }
+}
+
+// Rotate tower to specific direction
+function rotateTower(direction) {
+    const modal = document.getElementById('tower-upgrade-modal');
+    if (!modal || !modal.dataset.towerIndex) return;
+    
+    const towerIndex = parseInt(modal.dataset.towerIndex);
+    const tower = towers[towerIndex];
+    if (!tower || !tower.mesh) return;
+    
+    let targetRotation = 0;
+    switch(direction) {
+        case 'north': targetRotation = 0; break;
+        case 'east': targetRotation = Math.PI / 2; break;
+        case 'south': targetRotation = Math.PI; break;
+        case 'west': targetRotation = -Math.PI / 2; break;
+    }
+    
+    // Animate rotation smoothly
+    const startRotation = tower.mesh.rotation.y;
+    const rotationDiff = targetRotation - startRotation;
+    let animationProgress = 0;
+    const animationDuration = 30; // frames
+    
+    const animateRotation = () => {
+        animationProgress++;
+        const progress = animationProgress / animationDuration;
+        const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+        
+        tower.mesh.rotation.y = startRotation + (rotationDiff * easeProgress);
+        
+        if (animationProgress < animationDuration) {
+            requestAnimationFrame(animateRotation);
+        } else {
+            tower.mesh.rotation.y = targetRotation;
+        }
+    };
+    
+    animateRotation();
+    
+    // Play UI sound
+    if (audioManager) {
+        audioManager.playSound('uiClick');
+    }
+}
+
 // Upgrade tower
 function upgradeTower() {
     const modal = document.getElementById('tower-upgrade-modal');
@@ -752,7 +1067,7 @@ function upgradeTower() {
     if (!tower) return;
     
     const cost = towerSystem.getUpgradeCost(tower);
-    if (cost === null || gameState.money < cost || tower.level > 3) return;
+    if (cost === null || gameState.money < cost || tower.level >= 3) return;
     
     // Deduct money and upgrade tower
     gameState.money -= cost;
@@ -830,6 +1145,23 @@ function placeTowerFromModal(towerType) {
 function placeTower(x, z, towerType = 'basic') {
     if (gameMap[z][x].hasTower) return;
     
+    // Check if area is accessible
+    if (!isAreaAccessible(x, z)) {
+        console.warn('Cannot place tower: Area is not accessible');
+        return;
+    }
+    
+    // Check if area is in restricted zone
+    const restrictionCheck = isInRestrictedZone(x, z);
+    if (restrictionCheck.restricted) {
+        console.warn('Cannot place tower:', restrictionCheck.reason);
+        // Show user-friendly message
+        if (audioManager) {
+            audioManager.playSound('uiError');
+        }
+        return;
+    }
+    
     // Check if player has enough money
     const towerInfo = towerSystem.getTowerInfo(towerType);
     if (!towerInfo || gameState.money < towerInfo.cost) return;
@@ -854,6 +1186,18 @@ function placeTower(x, z, towerType = 'basic') {
         const progress = saveSystem.getGameData().progress;
         progress.towersBuilt = (progress.towersBuilt || 0) + 1;
         saveSystem.saveProgress(progress);
+    }
+    
+    // Tutorial logic: Enable Start Wave button when first tower is placed
+    if (tutorialState.active && tutorialState.step === 2) {
+        // Enable start wave button
+        const startButton = document.getElementById('start-wave');
+        if (startButton) {
+            startButton.disabled = false;
+            startButton.style.opacity = '1';
+            startButton.style.background = '#228B22';
+            startButton.textContent = 'Start Wave';
+        }
     }
     
     updateUI();
@@ -926,7 +1270,10 @@ function createEnemy(enemyType = 'tuyul') {
             alive: true,
             type: enemyType,
             reward: enemyConfig.reward,
-            effects: {}
+            effects: {},
+            // Add weakness/resistance from EnemySystem
+            weakness: enemySystem ? enemySystem.getEnemyWeakness(enemyType) : 'light',
+            resistance: enemySystem ? enemySystem.getEnemyResistance(enemyType) : null
         };
 
         enemies.push(enemyData);
@@ -1013,7 +1360,10 @@ function createTuyulEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer, // Store animation mixer
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('tuyul') : 'light',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('tuyul') : null
                 };
                 
                 enemies.push(enemyData);
@@ -1082,7 +1432,10 @@ function createTuyulEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('tuyul') : 'light',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('tuyul') : null
                 };
                 
                 enemies.push(enemyData);
@@ -1141,7 +1494,10 @@ function createBasicTuyulEnemy(enemyConfig) {
         alive: true,
         type: 'tuyul',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('tuyul') : 'light',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('tuyul') : null
     };
 
     enemies.push(enemyData);
@@ -1228,7 +1584,10 @@ function createJalangkungEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer, // Store animation mixer
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('jalangkung') : 'light',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('jalangkung') : null
                 };
                 
                 enemies.push(enemyData);
@@ -1297,7 +1656,10 @@ function createJalangkungEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('jalangkung') : 'light',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('jalangkung') : null
                 };
                 
                 enemies.push(enemyData);
@@ -1356,7 +1718,10 @@ function createBasicJalangkungEnemy(enemyConfig) {
         alive: true,
         type: 'jalangkung',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('jalangkung') : 'light',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('jalangkung') : null
     };
 
     enemies.push(enemyData);
@@ -1512,7 +1877,10 @@ function createGenderuwoEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('genderuwo') : 'heavy',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('genderuwo') : 'light'
                 };
                 
                 enemies.push(enemyData);
@@ -1571,7 +1939,10 @@ function createBasicGenderuwoEnemy(enemyConfig) {
         alive: true,
         type: 'genderuwo',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('genderuwo') : 'heavy',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('genderuwo') : 'light'
     };
 
     enemies.push(enemyData);
@@ -1658,7 +2029,10 @@ function createLembusuraEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer, // Store animation mixer
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('lembusura') : 'piercing',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('lembusura') : 'light'
                 };
                 
                 enemies.push(enemyData);
@@ -1786,7 +2160,10 @@ function createBasicLembusuraEnemy(enemyConfig) {
         alive: true,
         type: 'lembusura',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('lembusura') : 'piercing',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('lembusura') : 'light'
     };
 
     enemies.push(enemyData);
@@ -1873,7 +2250,10 @@ function createKuntilanakEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('kuntilanak') : 'aerial',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('kuntilanak') : 'splash'
                 };
                 
                 enemies.push(enemyData);
@@ -1933,7 +2313,10 @@ function createKuntilanakEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('kuntilanak') : 'aerial',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('kuntilanak') : 'splash'
                 };
                 
                 enemies.push(enemyData);
@@ -1990,7 +2373,10 @@ function createBasicKuntilanakEnemy(enemyConfig) {
         alive: true,
         type: 'kuntilanak',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('kuntilanak') : 'aerial',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('kuntilanak') : 'splash'
     };
 
     enemies.push(enemyData);
@@ -2065,7 +2451,10 @@ function createRatuLautNerakaEnemy(enemyConfig) {
                     type: 'ratu laut neraka',
                     reward: enemyConfig.reward,
                     effects: {},
-                    mixer: mixer
+                    mixer: mixer,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('ratu laut neraka') : 'piercing',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('ratu laut neraka') : ['light', 'splash']
                 };
                 
                 enemies.push(enemyData);
@@ -2100,7 +2489,10 @@ function createRatuLautNerakaEnemy(enemyConfig) {
                     type: 'ratu laut neraka',
                     reward: enemyConfig.reward,
                     effects: {},
-                    mixer: null
+                    mixer: null,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('ratu laut neraka') : 'piercing',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('ratu laut neraka') : ['light', 'splash']
                 };
                 
                 enemies.push(enemyData);
@@ -2144,7 +2536,10 @@ function createRatuLautNerakaEnemy(enemyConfig) {
                 type: 'ratu laut neraka',
                 reward: enemyConfig.reward,
                 effects: {},
-                mixer: null
+                mixer: null,
+                // Add weakness/resistance from EnemySystem
+                weakness: enemySystem ? enemySystem.getEnemyWeakness('ratu laut neraka') : 'piercing',
+                resistance: enemySystem ? enemySystem.getEnemyResistance('ratu laut neraka') : ['light', 'splash']
             };
             
             enemies.push(enemyData);
@@ -2192,7 +2587,10 @@ function createBasicRatuLautNerakaEnemy(enemyConfig) {
         alive: true,
         type: 'ratu laut neraka',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('ratu laut neraka') : 'piercing',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('ratu laut neraka') : ['light', 'splash']
     };
 
     enemies.push(enemyData);
@@ -2278,7 +2676,10 @@ function createOrangBunianEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('orang bunian') : 'magical',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('orang bunian') : 'light'
                 };
                 
                 enemies.push(enemyData);
@@ -2334,7 +2735,10 @@ function createOrangBunianEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('orang bunian') : 'magical',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('orang bunian') : 'light'
                 };
                 
                 enemies.push(enemyData);
@@ -2389,7 +2793,10 @@ function createBasicOrangBunianEnemy(enemyConfig) {
         alive: true,
         type: 'orang bunian',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('orang bunian') : 'magical',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('orang bunian') : 'light'
     };
 
     enemies.push(enemyData);
@@ -2475,7 +2882,10 @@ function createMbokDukunPikunEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('mbok dukun pikun') : 'piercing',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('mbok dukun pikun') : ['magical', 'light']
                 };
                 
                 enemies.push(enemyData);
@@ -2587,7 +2997,10 @@ function createBasicMbokDukunPikunEnemy(enemyConfig) {
         alive: true,
         type: 'mbok dukun pikun',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('mbok dukun pikun') : 'piercing',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('mbok dukun pikun') : ['magical', 'light']
     };
     
     enemies.push(enemyData);
@@ -2673,7 +3086,10 @@ function createRohTanahBangkitEnemy(enemyConfig) {
                     reward: enemyConfig.reward,
                     effects: {},
                     mixer: mixer,
-                    walkAction: walkAction
+                    walkAction: walkAction,
+                    // Add weakness/resistance from EnemySystem
+                    weakness: enemySystem ? enemySystem.getEnemyWeakness('roh tanah bangkit') : 'light',
+                    resistance: enemySystem ? enemySystem.getEnemyResistance('roh tanah bangkit') : 'physical'
                 };
                 
                 enemies.push(enemyData);
@@ -2782,7 +3198,10 @@ function createBasicRohTanahBangkitEnemy(enemyConfig) {
         alive: true,
         type: 'roh tanah bangkit',
         reward: enemyConfig.reward,
-        effects: {}
+        effects: {},
+        // Add weakness/resistance from EnemySystem
+        weakness: enemySystem ? enemySystem.getEnemyWeakness('roh tanah bangkit') : 'light',
+        resistance: enemySystem ? enemySystem.getEnemyResistance('roh tanah bangkit') : 'physical'
     };
 
     enemies.push(enemyData);
@@ -2852,12 +3271,18 @@ function updateEnemies() {
         const enemy = enemies[i];
         if (!enemy.alive) continue;
 
-        // Update health bar to face camera
-        enemy.healthBar.lookAt(camera.position);
+        // Update health bar to face camera (smooth update)
+        if (!performanceOptimizer || (performanceOptimizer.frameCount % 2 === 0)) {
+            enemy.healthBar.lookAt(camera.position);
+        }
         
-        // Update animation mixer for FBX models
+        // Update animation mixer for FBX models (frame-rate independent)
         if (enemy.mixer) {
-            enemy.mixer.update(0.016); // Assuming 60fps (1/60 = 0.016)
+            // Use actual deltaTime for consistent animation across all devices
+            const actualDelta = window.globalDeltaTime || 0.016;
+            // Cap deltaTime lebih ketat untuk animasi yang lebih smooth
+            const cappedDelta = Math.min(actualDelta, 0.025); // Max 40 FPS equivalent untuk smooth
+            enemy.mixer.update(cappedDelta);
         }
 
         // Calculate current speed (apply slow effect)
@@ -2869,12 +3294,15 @@ function updateEnemies() {
             delete enemy.effects.slow;
         }
 
-        // Move enemy along path
+        // Move enemy along path (frame-rate independent)
         if (enemy.pathIndex < enemyPath.length - 1) {
             const currentPos = enemyPath[enemy.pathIndex];
             const nextPos = enemyPath[enemy.pathIndex + 1];
             
-            enemy.progress += currentSpeed;
+            // Use deltaTime for consistent movement speed across all devices
+            const actualDelta = window.globalDeltaTime || 0.016;
+            const frameRateMultiplier = actualDelta / 0.016; // Normalize to 60 FPS
+            enemy.progress += currentSpeed * frameRateMultiplier;
             
             if (enemy.progress >= 1) {
                 enemy.progress = 0;
@@ -2951,10 +3379,7 @@ function updateTowers() {
             towerSystem.updateTower(tower, enemies, currentTime);
         } else {
             // Fallback to original tower update logic
-            // Rotate tower base slowly (check if mesh exists for FBX towers)
-            if (tower.mesh && tower.mesh.rotation) {
-                tower.mesh.rotation.y += 0.005;
-            }
+            // Tower rotation removed - now controlled manually via popup
             
             // Find nearest enemy in range
             let nearestEnemy = null;
@@ -3013,11 +3438,20 @@ function updateTowers() {
     });
 }
 
-// Fire projectile
+// Fire projectile (optimized with object pooling)
 function fireProjectile(tower, target) {
-    const geometry = new THREE.SphereGeometry(0.1, 6, 4);
-    const material = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
-    const projectile = new THREE.Mesh(geometry, material);
+    let projectile;
+    
+    // Use object pooling if performance optimizer is available
+    if (performanceOptimizer) {
+        projectile = performanceOptimizer.getPooledProjectile();
+        projectile.visible = true;
+    } else {
+        const geometry = new THREE.SphereGeometry(0.1, 6, 4);
+        const material = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+        projectile = new THREE.Mesh(geometry, material);
+    }
+    
     projectile.position.set(tower.x, 0.8, tower.z);
     scene.add(projectile);
     
@@ -3027,13 +3461,15 @@ function fireProjectile(tower, target) {
         speed: 0.3,
         damage: tower.damage,
         towerType: tower.type || 'basic',
-        effects: tower.effects || {}
+        damageType: tower.damageType || (towerSystem ? towerSystem.towerTypes[tower.type || 'basic']?.damageType : 'light'),
+        effects: tower.effects || {},
+        pooled: !!performanceOptimizer // Track if this projectile uses pooling
     };
     
     projectiles.push(projectileData);
     
-    // Create projectile trail effect
-    if (visualManager) {
+    // Create projectile trail effect (reduced frequency for performance)
+    if (visualManager && (!performanceOptimizer || performanceOptimizer.averageFPS > 30)) {
         visualManager.createTrail(projectile.position);
     }
 }
@@ -3047,6 +3483,12 @@ function updateProjectiles() {
         if (!target || !target.mesh.parent || !target.alive) {
             // Target destroyed, remove projectile
             scene.remove(projectile.mesh);
+            
+            // Return to pool if using object pooling
+            if (projectile.pooled && performanceOptimizer) {
+                performanceOptimizer.returnProjectileToPool(projectile.mesh);
+            }
+            
             projectiles.splice(i, 1);
             continue;
         }
@@ -3066,8 +3508,25 @@ function updateProjectiles() {
             // Hit target
             const hitPosition = target.mesh.position.clone();
             
-            // Apply damage
-            target.health -= projectile.damage;
+            // Apply damage with weakness/resistance calculation
+            let finalDamage = projectile.damage;
+            if (towerSystem && target.type) {
+                // Create tower object for damage calculation
+                const towerData = {
+                    damage: projectile.damage,
+                    damageType: projectile.damageType || 'light'
+                };
+                
+                // Create enemy object for damage calculation
+                const enemyData = {
+                    weakness: target.weakness,
+                    resistance: target.resistance
+                };
+                
+                finalDamage = towerSystem.calculateFinalDamage(towerData, enemyData);
+            }
+            
+            target.health -= finalDamage;
             
             // Apply special effects
             if (projectile.effects.slow) {
@@ -3091,7 +3550,23 @@ function updateProjectiles() {
                     if (enemy !== target && enemy.alive) {
                         const dist = enemy.mesh.position.distanceTo(hitPosition);
                         if (dist <= splashRadius) {
-                            enemy.health -= splashDamage;
+                            // Apply splash damage with weakness/resistance calculation
+                            let finalSplashDamage = splashDamage;
+                            if (towerSystem && enemy.type) {
+                                const towerData = {
+                                    damage: splashDamage,
+                                    damageType: projectile.damageType || 'heavy'
+                                };
+                                
+                                const enemyData = {
+                                    weakness: enemy.weakness,
+                                    resistance: enemy.resistance
+                                };
+                                
+                                finalSplashDamage = towerSystem.calculateFinalDamage(towerData, enemyData);
+                            }
+                            
+                            enemy.health -= finalSplashDamage;
                             
                             if (visualManager) {
                                 visualManager.createHitEffect(enemy.mesh.position);
@@ -3183,6 +3658,12 @@ function updateProjectiles() {
             }
             
             scene.remove(projectile.mesh);
+            
+            // Return to pool if using object pooling
+            if (projectile.pooled && performanceOptimizer) {
+                performanceOptimizer.returnProjectileToPool(projectile.mesh);
+            }
+            
             projectiles.splice(i, 1);
             updateUI();
         }
@@ -3194,6 +3675,9 @@ function startWave() {
     if (gameState.waveActive || !gameState.gameRunning) return;
     
     gameState.waveActive = true;
+    
+    // Update restricted area visuals based on current wave
+    updateRestrictedAreaVisuals();
     
     // Get wave configuration from level
     const waveConfig = currentLevel.waves && currentLevel.waves[gameState.wave - 1] 
@@ -3224,14 +3708,13 @@ function startWave() {
         [enemyQueue[i], enemyQueue[j]] = [enemyQueue[j], enemyQueue[i]];
     }
     
-    console.log(`Starting wave ${gameState.wave} with ${enemyQueue.length} enemies:`, enemyQueue);
+
     
     const spawnInterval = setInterval(() => {
         if (spawnedEnemies < enemyQueue.length) {
             const enemyType = enemyQueue[spawnedEnemies];
             createEnemy(enemyType);
             spawnedEnemies++;
-            console.log(`Spawned enemy ${spawnedEnemies}/${enemyQueue.length}: ${enemyType}`);
         }
         
         if (spawnedEnemies >= enemyQueue.length) {
@@ -3251,10 +3734,21 @@ function startWave() {
             gameState.waveActive = false;
             gameState.wave++;
             
-            // Auto start next wave after 2 seconds
+            // Tutorial logic: Complete tutorial if all enemies defeated
+            if (currentLevel && currentLevel.tutorial && tutorialState.active) {
+                setTimeout(() => {
+                    completeTutorialSuccess();
+                }, 1000);
+                return;
+            }
+            
+            // Auto start next wave after 2 seconds (only if not tutorial)
             setTimeout(() => {
                 if (gameState.gameRunning && gameState.wave <= 10) {
-                    startWave(); // Auto start next wave
+                    // Don't auto start next wave in tutorial mode
+                    if (!currentLevel || !currentLevel.tutorial) {
+                        startWave(); // Auto start next wave
+                    }
                 }
             }, 2000);
             
@@ -3269,8 +3763,20 @@ function startWave() {
     }, 50);
 }
 
-// Auto start first wave
+// Auto start first wave (check autoStart property)
 function autoStartGame() {
+    // Check if first wave has autoStart disabled
+    if (currentLevel && currentLevel.waves && currentLevel.waves[0] && currentLevel.waves[0].autoStart === false) {
+        console.log('Wave auto-start disabled: waves will not auto-start');
+        return;
+    }
+    
+    // Don't auto start if this is tutorial level (legacy check)
+    if (currentLevel && currentLevel.tutorial) {
+        console.log('Tutorial mode: waves will not auto-start');
+        return;
+    }
+    
     setTimeout(() => {
         if (gameState.gameRunning && !gameState.waveActive) {
             startWave();
@@ -3278,11 +3784,103 @@ function autoStartGame() {
     }, 1000); // Start first wave after 1 second
 }
 
+// Show enemy preview at level start
+function showLevelEnemyPreview() {
+    // Don't show preview for tutorial level
+    if (currentLevel && currentLevel.tutorial) {
+        autoStartGame();
+        return;
+    }
+    
+    // Show enemy preview modal
+    setTimeout(() => {
+        if (typeof showEnemyPreview === 'function') {
+            showEnemyPreview();
+        } else {
+            // Fallback to auto start if function not available
+            autoStartGame();
+        }
+    }, 1500); // Show preview after 1.5 seconds
+}
+
 // Game over
 function gameOver() {
     gameState.gameRunning = false;
-    document.getElementById('statusText').textContent = 'Game Over! Your base was destroyed!';
-    document.getElementById('gameStatus').style.display = 'block';
+    
+    // Check if this is tutorial mode
+    if (currentLevel && currentLevel.tutorial) {
+        // Tutorial failed - show restart option
+        const overlay = document.createElement('div');
+        overlay.id = 'tutorial-failed-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-family: Arial, sans-serif;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: #2c3e50;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        `;
+        
+        content.innerHTML = `
+            <h2 style="color: #e74c3c; margin-bottom: 20px;">Tutorial Gagal!</h2>
+            <p style="margin-bottom: 30px; line-height: 1.5;">Benteng Anda telah dihancurkan! Jangan khawatir, mari coba lagi dari awal.</p>
+            <button id="restart-tutorial-btn" style="
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                margin-right: 10px;
+            ">Coba Lagi</button>
+            <button id="exit-tutorial-btn" style="
+                background: #95a5a6;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            ">Kembali ke Menu</button>
+        `;
+        
+        overlay.appendChild(content);
+        document.body.appendChild(overlay);
+        
+        // Add event listeners
+        document.getElementById('restart-tutorial-btn').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            restartTutorial();
+        });
+        
+        document.getElementById('exit-tutorial-btn').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            if (typeof menuSystem !== 'undefined' && menuSystem.returnToMenu) {
+                menuSystem.returnToMenu();
+            }
+        });
+    } else {
+        // Normal game over
+        document.getElementById('statusText').textContent = 'Game Over! Your base was destroyed!';
+        document.getElementById('gameStatus').style.display = 'block';
+    }
     
     // Play game over sound
     if (audioManager) {
@@ -3475,14 +4073,67 @@ function animate(currentTime) {
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
     
+    // Make deltaTime available globally for consistent animation
+    window.globalDeltaTime = deltaTime;
+    
+    // Calculate FPS
+    fpsCounter++;
+    if (currentTime - fpsLastTime >= 1000) { // Update FPS every second
+        currentFPS = Math.round((fpsCounter * 1000) / (currentTime - fpsLastTime));
+        fpsCounter = 0;
+        fpsLastTime = currentTime;
+        
+        // Update FPS display
+        const fpsElement = document.getElementById('fps');
+        if (fpsElement) {
+            fpsElement.textContent = currentFPS;
+        }
+        
+        // Update quality display
+        const qualityElement = document.getElementById('current-quality');
+        if (qualityElement) {
+            qualityElement.textContent = GameConfig.quality.current.charAt(0).toUpperCase() + GameConfig.quality.current.slice(1);
+        }
+        
+        // Update global currentFPS for performance optimizer
+        window.currentFPS = currentFPS;
+    }
+    
+    // Update performance optimizer
+    if (performanceOptimizer) {
+        performanceOptimizer.update();
+    }
+    
     if (gameState.gameRunning) {
-        updateEnemies();
-        updateTowers();
+        // Use optimized updates for low FPS scenarios
+        if (performanceOptimizer && performanceOptimizer.averageFPS < 35) {
+            // Performance optimizer handles enemy and tower updates
+            performanceOptimizer.optimizeEnemyUpdates();
+            performanceOptimizer.optimizeTowerUpdates();
+        } else {
+            // Use normal updates for good FPS
+            updateEnemies();
+            updateTowers();
+        }
+        
         updateProjectiles();
         
-        // Update visual effects
+        // Update visual effects with adaptive delta time
         if (visualManager) {
-            visualManager.update(deltaTime);
+            const adaptiveDelta = performanceOptimizer && performanceOptimizer.averageFPS < 30 ? deltaTime * 2 : deltaTime;
+            visualManager.update(adaptiveDelta);
+        }
+    }
+    
+    // Update OrbitControls if enabled (optimized based on FPS)
+    if (orbitControls && isOrbitControlsEnabled) {
+        // Reduce OrbitControls update frequency on low FPS
+        const shouldUpdateControls = !performanceOptimizer || 
+                                   performanceOptimizer.averageFPS > 30 || 
+                                   performanceOptimizer.frameCount % 2 === 0;
+        
+        if (shouldUpdateControls) {
+            orbitControls.update();
         }
     }
     
@@ -3538,7 +4189,211 @@ function togglePause() {
     }
 }
 
+// Toggle adaptive quality
+function toggleAdaptiveQuality() {
+    if (performanceOptimizer) {
+        const isEnabled = !performanceOptimizer.adaptiveQuality;
+        performanceOptimizer.setAdaptiveQuality(isEnabled);
+        
+        const btn = document.getElementById('adaptive-quality');
+        if (btn) {
+            btn.title = `Auto Quality: ${isEnabled ? 'ON' : 'OFF'}`;
+            btn.style.opacity = isEnabled ? '1' : '0.6';
+        }
+        
+        // Play UI sound
+        if (audioManager) {
+            audioManager.playSound('uiClick');
+        }
+        
+        console.log('Adaptive quality:', isEnabled ? 'enabled' : 'disabled');
+    }
+}
 
+// Performance debugging functions (accessible from console)
+window.getPerformanceStats = function() {
+    if (performanceOptimizer) {
+        const stats = performanceOptimizer.getStats();
+        console.log('Performance Stats:', stats);
+        return stats;
+    }
+    return null;
+};
+
+window.setQuality = function(quality) {
+    if (['low', 'medium', 'high'].includes(quality)) {
+        if (performanceOptimizer) {
+            performanceOptimizer.changeQuality(quality);
+            console.log('Quality changed to:', quality);
+        }
+    } else {
+        console.log('Valid qualities: low, medium, high');
+    }
+};
+
+window.toggleAdaptive = function() {
+    toggleAdaptiveQuality();
+};
+
+
+
+// Set specific camera perspective
+function setPerspective(viewType) {
+    if (!camera || !cameraViews || cameraViews.length === 0) {
+        console.warn('Camera or views not initialized properly for perspective setting');
+        return;
+    }
+    
+    // Find the view by type
+    let targetView = null;
+    let targetIndex = -1;
+    
+    // Map view types to camera view names
+    const viewMapping = {
+        'top': 'Top-Down',
+        'side': 'Side View', 
+        'isometric': 'Isometric',
+        'free': '3D Perspective',
+        'birds': 'Bird\'s Eye',
+        'closeup': 'Close-up'
+    };
+    
+    const targetViewName = viewMapping[viewType];
+    if (!targetViewName) {
+        console.warn('Unknown view type:', viewType);
+        return;
+    }
+    
+    // Find the matching view
+    for (let i = 0; i < cameraViews.length; i++) {
+        if (cameraViews[i].name === targetViewName) {
+            targetView = cameraViews[i];
+            targetIndex = i;
+            break;
+        }
+    }
+    
+    if (!targetView) {
+        console.warn('View not found:', targetViewName);
+        return;
+    }
+    
+    // Store current camera state for the current perspective if OrbitControls was active
+    const wasOrbitControlsActive = isOrbitControlsEnabled;
+    
+    if (wasOrbitControlsActive && orbitControls && currentViewIndex >= 0) {
+        const currentPerspectiveName = cameraViews[currentViewIndex].name;
+        savedCameraStates[currentPerspectiveName] = {
+            position: camera.position.clone(),
+            target: orbitControls.target.clone()
+        };
+        console.log('Saved camera state for', currentPerspectiveName);
+    }
+    
+    // Set the view
+    currentViewIndex = targetIndex;
+    const currentView = targetView;
+    
+    // Check if this is 3D Perspective mode
+    const is3DPerspective = currentView.name === "3D Perspective";
+    
+    // Enable OrbitControls for all perspectives
+    if (orbitControls) {
+        orbitControls.enabled = true;
+        isOrbitControlsEnabled = true;
+        
+        // Set camera movement boundaries based on map size
+        const mapBounds = getMapBounds();
+        orbitControls.minDistance = 5;
+        orbitControls.maxDistance = 50;
+        orbitControls.maxPolarAngle = Math.PI / 2.2; // Prevent camera from going too low
+        orbitControls.minPolarAngle = Math.PI / 6;   // Prevent camera from going too high
+        
+        // Enable damping for smoother movement
+        orbitControls.enableDamping = true;
+        orbitControls.dampingFactor = 0.1;
+        
+        // Remove previous event listener if exists
+        if (orbitControlsChangeListener) {
+            orbitControls.removeEventListener('change', orbitControlsChangeListener);
+        }
+        
+        // Create and add new event listener to constrain camera movement
+        orbitControlsChangeListener = () => {
+            const bounds = getMapBounds();
+            // Only clamp if camera target is significantly outside bounds
+            const buffer = 5; // Allow some movement outside strict bounds
+            const expandedBounds = {
+                minX: bounds.minX - buffer,
+                maxX: bounds.maxX + buffer,
+                minZ: bounds.minZ - buffer,
+                maxZ: bounds.maxZ + buffer
+            };
+            
+            // Only clamp if really outside expanded bounds
+            if (orbitControls.target.x < expandedBounds.minX || 
+                orbitControls.target.x > expandedBounds.maxX ||
+                orbitControls.target.z < expandedBounds.minZ || 
+                orbitControls.target.z > expandedBounds.maxZ) {
+                clampCameraTarget(orbitControls.target, bounds);
+            }
+        };
+        orbitControls.addEventListener('change', orbitControlsChangeListener);
+        
+        // Check if we have saved camera state for this perspective
+        const savedState = savedCameraStates[currentView.name];
+        
+        if (savedState) {
+            // Restore saved camera state for this perspective
+            camera.position.copy(savedState.position);
+            orbitControls.target.copy(savedState.target);
+            console.log('Restored saved camera state for', currentView.name);
+        } else {
+            // No saved state, use current camera position to preserve position
+            savedCameraStates[currentView.name] = {
+                position: camera.position.clone(),
+                target: orbitControls.target.clone()
+            };
+            console.log('Preserved current camera position for', currentView.name);
+        }
+        
+        orbitControls.update();
+        console.log('OrbitControls enabled for', currentView.name, 'mode');
+    } else {
+        // No OrbitControls available, use standard camera positioning
+        camera.position.set(currentView.position.x, currentView.position.y, currentView.position.z);
+        camera.lookAt(currentView.lookAt.x, currentView.lookAt.y, currentView.lookAt.z);
+    }
+    
+    // Update perspective button states
+    updatePerspectiveButtonStates(viewType);
+    
+    // Play UI sound
+    if (audioManager) {
+        audioManager.playSound('uiClick');
+    }
+    
+    console.log(`Switched to ${currentView.name} view`);
+}
+
+// Update perspective button visual states
+function updatePerspectiveButtonStates(activeView) {
+    const buttons = ['perspective-top', 'perspective-side', 'perspective-iso', 'perspective-free', 'perspective-birds', 'perspective-closeup'];
+    const viewTypes = ['top', 'side', 'isometric', 'free', 'birds', 'closeup'];
+    
+    buttons.forEach((buttonId, index) => {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            if (viewTypes[index] === activeView) {
+                button.style.opacity = '1';
+                button.style.transform = 'scale(1.1)';
+            } else {
+                button.style.opacity = '0.7';
+                button.style.transform = 'scale(1)';
+            }
+        }
+    });
+}
 
 // Toggle camera perspective through multiple views
 function togglePerspective() {
@@ -3547,13 +4402,92 @@ function togglePerspective() {
         return;
     }
     
+    // Store current camera state for the current perspective if OrbitControls was active
+    const wasOrbitControlsActive = isOrbitControlsEnabled;
+    
+    if (wasOrbitControlsActive && orbitControls && currentViewIndex >= 0) {
+        const currentPerspectiveName = cameraViews[currentViewIndex].name;
+        savedCameraStates[currentPerspectiveName] = {
+            position: camera.position.clone(),
+            target: orbitControls.target.clone()
+        };
+        console.log('Saved camera state for', currentPerspectiveName);
+    }
+    
     // Cycle to next view
     currentViewIndex = (currentViewIndex + 1) % cameraViews.length;
     const currentView = cameraViews[currentViewIndex];
     
-    // Apply camera position and rotation
-    camera.position.set(currentView.position.x, currentView.position.y, currentView.position.z);
-    camera.lookAt(currentView.lookAt.x, currentView.lookAt.y, currentView.lookAt.z);
+    // Check if this is 3D Perspective mode
+    const is3DPerspective = currentView.name === "3D Perspective";
+    
+    // Enable OrbitControls for all perspectives
+    if (orbitControls) {
+        orbitControls.enabled = true;
+        isOrbitControlsEnabled = true;
+        
+        // Set camera movement boundaries based on map size
+        const mapBounds = getMapBounds();
+        orbitControls.minDistance = 5;
+        orbitControls.maxDistance = 50;
+        orbitControls.maxPolarAngle = Math.PI / 2.2; // Prevent camera from going too low
+        orbitControls.minPolarAngle = Math.PI / 6;   // Prevent camera from going too high
+        
+        // Enable damping for smoother movement
+        orbitControls.enableDamping = true;
+        orbitControls.dampingFactor = 0.1;
+        
+        // Remove previous event listener if exists
+        if (orbitControlsChangeListener) {
+            orbitControls.removeEventListener('change', orbitControlsChangeListener);
+        }
+        
+        // Create and add new event listener to constrain camera movement
+        orbitControlsChangeListener = () => {
+            const bounds = getMapBounds();
+            // Only clamp if camera target is significantly outside bounds
+            const buffer = 5; // Allow some movement outside strict bounds
+            const expandedBounds = {
+                minX: bounds.minX - buffer,
+                maxX: bounds.maxX + buffer,
+                minZ: bounds.minZ - buffer,
+                maxZ: bounds.maxZ + buffer
+            };
+            
+            // Only clamp if really outside expanded bounds
+            if (orbitControls.target.x < expandedBounds.minX || 
+                orbitControls.target.x > expandedBounds.maxX ||
+                orbitControls.target.z < expandedBounds.minZ || 
+                orbitControls.target.z > expandedBounds.maxZ) {
+                clampCameraTarget(orbitControls.target, bounds);
+            }
+        };
+        orbitControls.addEventListener('change', orbitControlsChangeListener);
+        
+        // Check if we have saved camera state for this perspective
+        const savedState = savedCameraStates[currentView.name];
+        
+        if (savedState) {
+            // Restore saved camera state for this perspective
+            camera.position.copy(savedState.position);
+            orbitControls.target.copy(savedState.target);
+            console.log('Restored saved camera state for', currentView.name);
+        } else {
+            // No saved state, use current camera position to preserve position
+            savedCameraStates[currentView.name] = {
+                position: camera.position.clone(),
+                target: orbitControls.target.clone()
+            };
+            console.log('Preserved current camera position for', currentView.name);
+        }
+        
+        orbitControls.update();
+        console.log('OrbitControls enabled for', currentView.name, 'mode');
+    } else {
+        // No OrbitControls available, use standard camera positioning
+        camera.position.set(currentView.position.x, currentView.position.y, currentView.position.z);
+        camera.lookAt(currentView.lookAt.x, currentView.lookAt.y, currentView.lookAt.z);
+    }
     
     // Update button text
     const button = document.getElementById('toggle-perspective');
@@ -3574,6 +4508,441 @@ function togglePerspective() {
 // Game initialization is now handled by MenuSystem
 // window.addEventListener('load', init); // Removed to prevent conflicts with menu system
 
+// Tower Recommendation System
+function showTowerRecommendation() {
+    if (!currentLevel || !currentLevel.waves || !enemySystem || !towerSystem) return;
+    
+    const modal = document.getElementById('tower-recommendation-modal');
+    const content = document.getElementById('tower-recommendation-content');
+    
+    if (!modal || !content) return;
+    
+    // Collect all unique enemies from current wave and next 2 waves
+    const currentWave = gameState.wave - 1;
+    const wavesToAnalyze = currentLevel.waves.slice(currentWave, currentWave + 3);
+    const enemyTypes = new Set();
+    
+    wavesToAnalyze.forEach(wave => {
+        if (wave && wave.enemies) {
+            wave.enemies.forEach(enemy => {
+                enemyTypes.add(enemy.type);
+            });
+        }
+    });
+    
+    // Get tower recommendations based on enemy weaknesses
+    const recommendations = getTowerRecommendations(Array.from(enemyTypes));
+    
+    // Generate recommendation content
+    let html = '<div style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%); border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid rgba(255, 255, 255, 0.15);">';
+    html += '<h3 style="margin: 0 0 12px 0; color: #FFD700; font-size: 16px; font-weight: 600;">📊 Analisis Musuh:</h3>';
+    
+    // Show enemy types and their weaknesses
+    const enemyEmojis = {
+        'tuyul': '👺', 'jalangkung': '👻', 'genderuwo': '🧌', 'lembusura': '🐉',
+        'kuntilanak': '👤', 'mbok dukun pikun': '🧙‍♀️', 'ratu laut neraka': '🧜‍♀️',
+        'orang bunian': '🧚‍♂️', 'roh tanah bangkit': '💀'
+    };
+    
+    enemyTypes.forEach(enemyType => {
+        const weakness = enemySystem.getEnemyWeakness(enemyType);
+        const resistance = enemySystem.getEnemyResistance(enemyType);
+        const emoji = enemyEmojis[enemyType] || '👹';
+        
+        html += `<div style="margin: 8px 0; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 8px; font-size: 12px;">`;
+        html += `<strong>${emoji} ${enemyType.charAt(0).toUpperCase() + enemyType.slice(1)}</strong><br>`;
+        html += `<span style="color: #ef4444;">Lemah: ${weakness || 'Tidak ada'}</span> | `;
+        html += `<span style="color: #10b981;">Tahan: ${resistance || 'Tidak ada'}</span>`;
+        html += `</div>`;
+    });
+    
+    html += '</div>';
+    
+    // Show tower recommendations
+    html += '<div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.08) 100%); border-radius: 16px; padding: 16px; border: 1px solid rgba(16, 185, 129, 0.3);">';
+    html += '<h3 style="margin: 0 0 12px 0; color: #10B981; font-size: 16px; font-weight: 600;">🏗️ Tower yang Disarankan:</h3>';
+    
+    recommendations.forEach((rec, index) => {
+        const priority = index === 0 ? '🔥 PRIORITAS TINGGI' : index === 1 ? '⭐ DIREKOMENDASIKAN' : '💡 OPSIONAL';
+        const priorityColor = index === 0 ? '#ef4444' : index === 1 ? '#f59e0b' : '#6b7280';
+        
+        html += `<div style="margin: 12px 0; padding: 12px; background: rgba(0,0,0,0.4); border-radius: 12px; border-left: 4px solid ${priorityColor};">`;
+        html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">`;
+        html += `<strong style="color: white; font-size: 14px;">${rec.icon} ${rec.name}</strong>`;
+        html += `<span style="color: ${priorityColor}; font-size: 10px; font-weight: 600;">${priority}</span>`;
+        html += `</div>`;
+        html += `<div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-bottom: 6px;">${rec.description}</div>`;
+        html += `<div style="font-size: 10px; color: #10b981;">💰 Harga: $${rec.cost} | ⚡ ${rec.reason}</div>`;
+        html += `</div>`;
+    });
+    
+    html += '</div>';
+    
+    content.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+function getTowerRecommendations(enemyTypes) {
+    const recommendations = [];
+    const damageTypeCount = {};
+    
+    // Count required damage types based on enemy weaknesses
+    enemyTypes.forEach(enemyType => {
+        const weakness = enemySystem.getEnemyWeakness(enemyType);
+        if (weakness && weakness !== 'none') {
+            damageTypeCount[weakness] = (damageTypeCount[weakness] || 0) + 1;
+        }
+    });
+    
+    // Sort damage types by frequency
+    const sortedDamageTypes = Object.entries(damageTypeCount)
+        .sort(([,a], [,b]) => b - a)
+        .map(([type]) => type);
+    
+    // Tower mapping with icons and descriptions
+    const towerMapping = {
+        'physical': {
+            towers: ['basic', 'piercing'],
+            primary: { name: 'Basic Tower', icon: '🏹', cost: 50, description: 'Tower dasar dengan damage physical yang stabil' },
+            secondary: { name: 'Piercing Tower', icon: '🎯', cost: 80, description: 'Menembus armor dan mengenai multiple target' }
+        },
+        'fire': {
+            towers: ['splash'],
+            primary: { name: 'Splash Tower', icon: '💥', cost: 100, description: 'Damage area dengan efek fire yang kuat' }
+        },
+        'ice': {
+            towers: ['freeze', 'slow'],
+            primary: { name: 'Freeze Tower', icon: '❄️', cost: 120, description: 'Membekukan musuh dan memperlambat gerakan' },
+            secondary: { name: 'Slow Tower', icon: '🧊', cost: 75, description: 'Memperlambat musuh secara konsisten' }
+        },
+        'poison': {
+            towers: ['poison'],
+            primary: { name: 'Poison Tower', icon: '☠️', cost: 90, description: 'Damage poison yang berkelanjutan' }
+        },
+        'energy': {
+            towers: ['laser'],
+            primary: { name: 'Laser Tower', icon: '⚡', cost: 150, description: 'Damage energy dengan precision tinggi' }
+        },
+        'air': {
+            towers: ['antiair'],
+            primary: { name: 'Anti-Air Tower', icon: '🚀', cost: 110, description: 'Khusus untuk musuh terbang dan air-type' }
+        }
+    };
+    
+    // Add primary recommendations based on enemy weaknesses
+    sortedDamageTypes.forEach((damageType, index) => {
+        const mapping = towerMapping[damageType];
+        if (mapping && mapping.primary) {
+            const count = damageTypeCount[damageType];
+            recommendations.push({
+                ...mapping.primary,
+                reason: `Efektif melawan ${count} jenis musuh`,
+                priority: index
+            });
+        }
+    });
+    
+    // Add basic tower if no specific weaknesses found
+    if (recommendations.length === 0) {
+        recommendations.push({
+            name: 'Basic Tower',
+            icon: '🏹',
+            cost: 50,
+            description: 'Tower serbaguna untuk semua situasi',
+            reason: 'Pilihan aman untuk memulai defense'
+        });
+    }
+    
+    // Add secondary recommendations
+    if (recommendations.length < 3) {
+        // Add slow tower for crowd control
+        if (!recommendations.some(r => r.name.includes('Slow'))) {
+            recommendations.push({
+                name: 'Slow Tower',
+                icon: '🧊',
+                cost: 75,
+                description: 'Crowd control untuk memperlambat musuh',
+                reason: 'Memberikan waktu lebih untuk damage'
+            });
+        }
+        
+        // Add splash for area damage
+        if (!recommendations.some(r => r.name.includes('Splash'))) {
+            recommendations.push({
+                name: 'Splash Tower',
+                icon: '💥',
+                cost: 100,
+                description: 'Area damage untuk grup musuh',
+                reason: 'Efisien melawan banyak musuh sekaligus'
+            });
+        }
+    }
+    
+    return recommendations.slice(0, 3); // Return top 3 recommendations
+}
+
+function closeTowerRecommendation() {
+    const modal = document.getElementById('tower-recommendation-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Tutorial System Functions
+function initializeTutorial() {
+    tutorialState.active = true;
+    tutorialState.step = 0;
+    tutorialState.completed = false;
+    
+    // Disable start wave button initially in tutorial
+    const startButton = document.getElementById('start-wave');
+    if (startButton) {
+        startButton.disabled = true;
+        startButton.style.opacity = '0.5';
+        startButton.style.background = '#666';
+        startButton.textContent = 'Tempatkan Tower Dulu';
+    }
+    
+    // Create tutorial overlay
+    createTutorialOverlay();
+    
+    // Start first tutorial step
+    setTimeout(() => {
+        showTutorialStep(0);
+    }, 1000);
+}
+
+function createTutorialOverlay() {
+    // Remove existing overlay if any
+    if (tutorialState.overlay) {
+        document.body.removeChild(tutorialState.overlay);
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'tutorial-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.85);
+        color: white;
+        padding: 12px;
+        border-radius: 8px;
+        max-width: 280px;
+        width: 280px;
+        z-index: 10000;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        line-height: 1.4;
+        border: 1px solid #FFD700;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(5px);
+    `;
+    
+    document.body.appendChild(overlay);
+    tutorialState.overlay = overlay;
+}
+
+function showTutorialStep(step) {
+    if (!tutorialState.overlay) return;
+    
+    const steps = [
+        {
+            title: "Selamat Datang di Tutorial!",
+            content: "Selamat datang di Tower of Mitos! Game tower defense dengan tema mistis Indonesia. Di sini Anda akan belajar cara mempertahankan wilayah dari serangan makhluk mistis.",
+            action: "Klik 'Lanjut' untuk memulai pembelajaran.",
+            canNext: true
+        },
+        {
+            title: "Cara Bermain",
+            content: "Tujuan Anda adalah mencegah musuh mencapai ujung jalur merah. Anda memiliki 30 HP (nyawa). Setiap musuh yang lolos akan mengurangi HP Anda. Jika HP habis, permainan berakhir.",
+            action: "Perhatikan bar HP dan uang di pojok kanan atas layar.",
+            canNext: true
+        },
+        {
+            title: "Menempatkan Tower",
+            content: "Sekarang saatnya menempatkan tower pertama! Klik pada area hijau di samping jalur untuk menempatkan Lilin Pemanggil Arwah. Tower ini akan menyerang musuh yang lewat.",
+            action: "Klik area hijau untuk menempatkan tower. Anda harus menempatkan tower sebelum bisa melanjutkan!",
+            canNext: false,
+            requireTower: true
+        },
+        {
+            title: "Memulai Gelombang Musuh",
+            content: "Bagus! Anda telah menempatkan tower pertama. Sekarang klik tombol 'Start Wave' untuk memulai gelombang musuh. Musuh akan muncul dan berjalan menuju ujung jalur.",
+            action: "Klik tombol 'Start Wave' untuk memulai pertarungan!",
+            canNext: true,
+            startWave: true
+        }
+    ];
+    
+    if (step >= steps.length) {
+        completeTutorial();
+        return;
+    }
+    
+    const currentStep = steps[step];
+    tutorialState.overlay.innerHTML = `
+        <h3 style="margin: 0 0 8px 0; color: #FFD700; font-size: 14px;">${currentStep.title}</h3>
+        <p style="margin: 0 0 10px 0; font-size: 12px;">${currentStep.content}</p>
+        <p style="margin: 0 0 12px 0; font-style: italic; color: #87CEEB; font-size: 11px;">${currentStep.action}</p>
+        <button onclick="nextTutorialStep()" style="
+            background: #4169E1;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-right: 5px;
+        ">Lanjut</button>
+        ${step > 0 ? '<button onclick="prevTutorialStep()" style="background: #666; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px;">Kembali</button>' : ''}
+    `;
+}
+
+function nextTutorialStep() {
+    const currentStep = tutorialState.step;
+    
+    // Check if current step has requirements
+    if (currentStep === 2) { // Step 2 requires tower placement
+        // Check if player has placed at least one tower
+        const hasTower = towers && towers.length > 0;
+        if (!hasTower) {
+            // Show message that tower is required
+            const overlay = tutorialState.overlay;
+            if (overlay) {
+                const actionText = overlay.querySelector('p:nth-child(3)');
+                if (actionText) {
+                    actionText.style.color = '#ff6b6b';
+                    actionText.textContent = 'Anda harus menempatkan tower terlebih dahulu!';
+                    setTimeout(() => {
+                        actionText.style.color = '#87CEEB';
+                        actionText.textContent = 'Klik area hijau untuk menempatkan tower. Anda harus menempatkan tower sebelum bisa melanjutkan!';
+                    }, 2000);
+                }
+            }
+            return;
+        }
+    }
+    
+    tutorialState.step++;
+    showTutorialStep(tutorialState.step);
+    
+    // If we just moved to step 3 (start wave step), enable the start wave button
+    if (tutorialState.step === 3) {
+        // Enable start wave functionality
+        const startButton = document.getElementById('start-wave');
+        if (startButton) {
+            startButton.disabled = false;
+            startButton.style.opacity = '1';
+            startButton.style.background = '#228B22';
+            startButton.textContent = 'Start Wave';
+        }
+    }
+}
+
+function prevTutorialStep() {
+    if (tutorialState.step > 0) {
+        tutorialState.step--;
+        showTutorialStep(tutorialState.step);
+    }
+}
+
+function completeTutorial() {
+    tutorialState.completed = true;
+    tutorialState.active = false;
+    
+    if (tutorialState.overlay) {
+        tutorialState.overlay.innerHTML = `
+            <h3 style="margin: 0 0 8px 0; color: #FFD700; font-size: 14px;">Tutorial Selesai!</h3>
+            <p style="margin: 0 0 12px 0; font-size: 12px;">Anda telah menyelesaikan tutorial. Selamat bermain!</p>
+            <button onclick="closeTutorial()" style="
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+            ">Tutup</button>
+        `;
+    }
+}
+
+function completeTutorialSuccess() {
+    tutorialState.completed = true;
+    tutorialState.active = false;
+    
+    if (tutorialState.overlay) {
+        tutorialState.overlay.innerHTML = `
+            <h3 style="margin: 0 0 8px 0; color: #FFD700; font-size: 14px;">Selamat! Tutorial Berhasil!</h3>
+            <p style="margin: 0 0 10px 0; font-size: 12px;">Anda berhasil mengalahkan semua musuh! Tutorial telah selesai.</p>
+            <p style="margin: 0 0 12px 0; color: #90EE90; font-size: 11px;">Sekarang Anda siap bermain level yang sesungguhnya!</p>
+            <button onclick="returnToMenu()" style="
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+                margin-right: 5px;
+            ">Kembali ke Menu</button>
+            <button onclick="closeTutorial()" style="
+                background: #2196F3;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+            ">Lanjut Bermain</button>
+        `;
+    }
+}
+
+function restartTutorial() {
+    // Reset game state
+    gameState.health = currentLevel.settings.startingHealth || 30;
+    gameState.money = currentLevel.settings.startingMoney || 300;
+    gameState.wave = 1;
+    gameState.waveActive = false;
+    gameState.enemiesAlive = 0;
+    
+    // Clear all enemies
+    enemies.forEach(enemy => {
+        if (enemy.mesh) scene.remove(enemy.mesh);
+    });
+    enemies.length = 0;
+    
+    // Clear all towers
+    towers.forEach(tower => {
+        if (tower.mesh) scene.remove(tower.mesh);
+        if (tower.cannon) scene.remove(tower.cannon);
+        if (gameMap && gameMap[tower.z] && gameMap[tower.z][tower.x]) {
+            gameMap[tower.z][tower.x].hasTower = false;
+        }
+    });
+    towers.length = 0;
+    
+    // Clear all projectiles
+    projectiles.forEach(projectile => {
+        if (projectile.mesh) scene.remove(projectile.mesh);
+    });
+    projectiles.length = 0;
+    
+    // Restart tutorial
+    initializeTutorial();
+    
+    updateUI();
+}
+
+function closeTutorial() {
+    if (tutorialState.overlay) {
+        document.body.removeChild(tutorialState.overlay);
+        tutorialState.overlay = null;
+    }
+}
+
 // Make functions globally available
 window.selectTowerType = selectTowerType;
 window.togglePause = togglePause;
@@ -3586,3 +4955,6 @@ window.hideTowerUpgradeModal = hideTowerUpgradeModal;
 window.upgradeTower = upgradeTower;
 window.destroyTower = destroyTower;
 window.placeTowerFromModal = placeTowerFromModal;
+window.nextTutorialStep = nextTutorialStep;
+window.prevTutorialStep = prevTutorialStep;
+window.closeTutorial = closeTutorial;
